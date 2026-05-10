@@ -1,0 +1,127 @@
+import type { AppUser, Station, ScheduleMethod, GeneratedSchedule, ScheduledSlot } from '@/types/scout';
+import type { TBAMatch } from '@/lib/tba';
+import { STATIONS } from '@/types/scout';
+import { sortMatches } from '@/lib/tba';
+import { Timestamp } from 'firebase/firestore';
+
+export type SortOrder = 'alpha' | 'experience';
+
+function toSlot(u: AppUser): ScheduledSlot {
+  return { uid: u.uid, name: u.displayName, photoURL: u.photoURL };
+}
+
+/** Sort scouts by chosen order */
+function sortScouts(scouts: AppUser[], order: SortOrder, matchCounts: Map<string, number>): AppUser[] {
+  return [...scouts].sort((a, b) => {
+    if (order === 'experience') {
+      return (matchCounts.get(b.uid) ?? 0) - (matchCounts.get(a.uid) ?? 0);
+    }
+    return a.displayName.localeCompare(b.displayName);
+  });
+}
+
+/** Split scouts into groups of up to 6, each group filling a full set of stations */
+function buildTeams(scouts: AppUser[]): AppUser[][] {
+  const teams: AppUser[][] = [];
+  for (let i = 0; i < scouts.length; i += 6) {
+    teams.push(scouts.slice(i, i + 6));
+  }
+  return teams.length > 0 ? teams : [[]];
+}
+
+/** Assign stations to a team of up to 6 scouts */
+function stationMap(team: AppUser[]): Partial<Record<Station, ScheduledSlot>> {
+  const result: Partial<Record<Station, ScheduledSlot>> = {};
+  team.forEach((scout, i) => {
+    if (i < STATIONS.length) result[STATIONS[i]] = toSlot(scout);
+  });
+  return result;
+}
+
+/** Group matches into ~blockMinutes windows by predicted/scheduled time */
+function groupByTimeBlock(matches: TBAMatch[], blockMinutes = 30): TBAMatch[][] {
+  if (matches.length === 0) return [];
+  const sorted = sortMatches(matches);
+  const blocks: TBAMatch[][] = [];
+  let blockStart = sorted[0].predicted_time ?? sorted[0].time ?? 0;
+  let current: TBAMatch[] = [];
+
+  for (const m of sorted) {
+    const t = m.predicted_time ?? m.time ?? blockStart;
+    if (t - blockStart > blockMinutes * 60 && current.length > 0) {
+      blocks.push(current);
+      current = [];
+      blockStart = t;
+    }
+    current.push(m);
+  }
+  if (current.length > 0) blocks.push(current);
+  return blocks;
+}
+
+export interface ScheduleOptions {
+  method: ScheduleMethod;
+  sortOrder: SortOrder;
+  matchCounts?: Map<string, number>;
+}
+
+export function generateSchedule(
+  qualMatches: TBAMatch[],
+  primaryScouts: AppUser[],
+  options: ScheduleOptions
+): GeneratedSchedule {
+  const { method, sortOrder, matchCounts = new Map() } = options;
+  const sorted = sortScouts(primaryScouts, sortOrder, matchCounts);
+  const teams = buildTeams(sorted);
+  const qualOnly = sortMatches(qualMatches.filter((m) => m.comp_level === 'qm'));
+  const assignments: GeneratedSchedule['assignments'] = {};
+
+  const rotateN = method === 'fixed' ? 0
+    : method === 'rotate-1' ? 1
+    : method === 'rotate-2' ? 2
+    : method === 'rotate-3' ? 3
+    : 0; // time-block handled separately
+
+  if (method === 'fixed' || teams.length === 1) {
+    const map = stationMap(teams[0]);
+    qualOnly.forEach((m) => { assignments[m.key] = map; });
+
+  } else if (method.startsWith('rotate')) {
+    qualOnly.forEach((m, idx) => {
+      const teamIdx = Math.floor(idx / rotateN) % teams.length;
+      assignments[m.key] = stationMap(teams[teamIdx]);
+    });
+
+  } else if (method === 'time-block') {
+    const hasTime = qualOnly.some((m) => m.predicted_time ?? m.time);
+    if (!hasTime) {
+      // Fall back to rotate-3 if no time data
+      qualOnly.forEach((m, idx) => {
+        assignments[m.key] = stationMap(teams[Math.floor(idx / 3) % teams.length]);
+      });
+    } else {
+      const blocks = groupByTimeBlock(qualOnly, 30);
+      blocks.forEach((block, idx) => {
+        const teamIdx = idx % teams.length;
+        block.forEach((m) => { assignments[m.key] = stationMap(teams[teamIdx]); });
+      });
+    }
+  }
+
+  return {
+    method,
+    generatedAt: Timestamp.now(),
+    primaryScoutCount: primaryScouts.length,
+    assignments,
+  };
+}
+
+/** Summary stats for a generated schedule */
+export function scheduleStats(schedule: GeneratedSchedule) {
+  const allSlots = Object.values(schedule.assignments).flatMap((m) => Object.values(m));
+  const byUid = new Map<string, number>();
+  allSlots.forEach((s) => {
+    if (s) byUid.set(s.uid, (byUid.get(s.uid) ?? 0) + 1);
+  });
+  return { totalMatches: Object.keys(schedule.assignments).length, byScout: byUid };
+}

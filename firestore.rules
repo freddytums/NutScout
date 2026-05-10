@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userRole() {
+      let uid = request.auth.uid;
+      return exists(/databases/$(database)/documents/users/$(uid))
+        ? userDoc().data.role
+        : 'scout';
+    }
+
+    function myTeamKey() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? userDoc().data.get('teamKey', '')
+        : '';
+    }
+
+    // role helpers
+    function isAtLeastTeamLead() {
+      return isSignedIn() && userRole() in ['team-lead', 'lead', 'admin'];
+    }
+
+    function isLead() {
+      return isSignedIn() && userRole() in ['lead', 'admin'];
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userRole() == 'admin';
+    }
+
+    // true when the target user's teamKey matches the requester's teamKey
+    function sameTeam(targetUid) {
+      let targetDoc = get(/databases/$(database)/documents/users/$(targetUid));
+      return myTeamKey() != '' && targetDoc.data.get('teamKey', '') == myTeamKey();
+    }
+
+    // ── User profiles ────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if isSignedIn();
+
+      // First login: must start as scout, cannot self-assign higher role
+      allow create: if isSignedIn()
+                    && request.auth.uid == uid
+                    && request.resource.data.role == 'scout';
+
+      // Self-update: can change display name, photo, teamNumber, teamKey, teamName
+      // but not role or isPrimaryScout (those require lead+)
+      allow update: if isSignedIn()
+                    && request.auth.uid == uid
+                    && request.resource.data.role == resource.data.role
+                    && request.resource.data.isPrimaryScout == resource.data.get('isPrimaryScout', false);
+
+      // Team leads can toggle isPrimaryScout for same-team scouts (but not change role or teamKey)
+      allow update: if isAtLeastTeamLead()
+                    && sameTeam(uid)
+                    && request.resource.data.role == resource.data.role
+                    && request.resource.data.get('teamKey', '') == resource.data.get('teamKey', '');
+
+      // Lead/admin can update anyone (role promotions, team assignments)
+      allow update: if isLead();
+    }
+
+    // ── Events ───────────────────────────────────────────────────────
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isLead();
+
+      // ── Pit entries ──────────────────────────────────────────────
+      match /pits/{teamNumber} {
+        allow read: if isSignedIn();
+        allow create: if isLead();
+
+        allow update: if isSignedIn() && (
+          resource.data.status == 'unclaimed'
+          || resource.data.dibbedBy == request.auth.uid
+          || isAtLeastTeamLead()
+        );
+      }
+
+      // ── Match entries ────────────────────────────────────────────
+      match /matches/{matchId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update, delete: if isAtLeastTeamLead();
+      }
+
+      // ── Station assignments ──────────────────────────────────────
+      match /meta/assignments {
+        allow read: if isSignedIn();
+        allow write: if isAtLeastTeamLead();
+      }
+
+      // ── Generated schedule ───────────────────────────────────────
+      match /meta/schedule {
+        allow read: if isSignedIn();
+        allow write: if isAtLeastTeamLead();
+      }
+    }
+
+    // ── Per-user notifications ───────────────────────────────────────────
+    match /users/{uid}/notifications/{notifId} {
+      allow read, delete: if isSignedIn() && request.auth.uid == uid;
+      allow update: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.read == true;
+      allow create: if isAtLeastTeamLead();
+    }
+
+    // ── App config (shared TBA key, stale status, admin contact) ────────
+    match /config/app {
+      allow read: if isSignedIn();
+      allow write: if isLead();  // lead or admin can update TBA key
+    }
+  }
+}
