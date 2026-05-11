@@ -1,23 +1,20 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Map, ClipboardList, LayoutDashboard, Wrench, Settings, CalendarCheck } from 'lucide-react';
+import { NavLink, Outlet } from 'react-router-dom';
+import { ClipboardList, Wrench, CalendarCheck, LayoutDashboard, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { useNotifications } from '@/hooks/useNotifications';
 import { RoleSandbox } from '@/components/RoleSandbox';
+import { ProfileMenu } from '@/components/ProfileMenu';
 
 const navItems = [
-  { to: '/match', icon: ClipboardList, label: 'Match' },
-  { to: '/pit', icon: Wrench, label: 'Pit' },
-  { to: '/map', icon: Map, label: 'Map' },
-  { to: '/assignments', icon: CalendarCheck, label: 'Schedule' },
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Lead', roleRequired: 'lead' as const },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/match',       icon: ClipboardList,   label: 'Match'    },
+  { to: '/pits',        icon: Wrench,           label: 'Pits'     },
+  { to: '/assignments', icon: CalendarCheck,    label: 'Schedule' },
+  { to: '/manage',      icon: LayoutDashboard,  label: 'Manage',  roleRequired: 'lead' as const },
+  { to: '/settings',    icon: Settings,         label: 'Settings' },
 ];
 
 export function AppShell() {
   const { user } = useAuth();
-  const { unreadCount } = useNotifications();
-  const navigate = useNavigate();
 
   const visibleItems = navItems.filter(
     (item) => !item.roleRequired || user?.role === item.roleRequired || user?.role === 'admin'
@@ -37,25 +34,7 @@ export function AppShell() {
           {user && (
             <div className="flex items-center gap-2">
               <RoleSandbox />
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              className="relative cursor-pointer"
-              aria-label="My profile"
-            >
-              {user.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full object-fill" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-[hsl(var(--accent)/0.2)] flex items-center justify-center text-xs font-semibold text-[hsl(var(--accent))]">
-                  {user.displayName[0]}
-                </div>
-              )}
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[hsl(var(--destructive))] flex items-center justify-center text-[9px] font-bold text-white">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
+              <ProfileMenu />
             </div>
           )}
         </div>

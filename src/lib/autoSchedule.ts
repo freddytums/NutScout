@@ -95,7 +95,6 @@ export function generateSchedule(
   } else if (method === 'time-block') {
     const hasTime = qualOnly.some((m) => m.predicted_time ?? m.time);
     if (!hasTime) {
-      // Fall back to rotate-3 if no time data
       qualOnly.forEach((m, idx) => {
         assignments[m.key] = stationMap(teams[Math.floor(idx / 3) % teams.length]);
       });
@@ -106,6 +105,25 @@ export function generateSchedule(
         block.forEach((m) => { assignments[m.key] = stationMap(teams[teamIdx]); });
       });
     }
+
+  } else if (method === 'alt-halves') {
+    // Split quals into two halves — different scout group per half.
+    // Great for events where you bring a morning crew and afternoon crew.
+    const mid = Math.ceil(qualOnly.length / 2);
+    qualOnly.forEach((m, idx) => {
+      const teamIdx = idx < mid ? 0 : 1 % teams.length;
+      assignments[m.key] = stationMap(teams[teamIdx]);
+    });
+
+  } else if (method === 'snake') {
+    // Scouts cycle through groups in a snake pattern: A B C … C B A A B C …
+    // Gives each scout a variety of match blocks without hard restarts.
+    const forward = teams.map((_, i) => i);
+    const backward = [...forward].reverse();
+    const snake = [...forward, ...backward.slice(1, -1)]; // no duplicate endpoints
+    qualOnly.forEach((m, idx) => {
+      assignments[m.key] = stationMap(teams[snake[idx % snake.length]]);
+    });
   }
 
   return {

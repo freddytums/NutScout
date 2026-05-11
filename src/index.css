@@ -65,4 +65,72 @@
   .safe-top {
     padding-top: env(safe-area-inset-top, 0px);
   }
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ── Pit-map disco overlay animations ────────────────────────────────────── */
+
+/* Walk in from off-screen left, land at translateX(0) */
+@keyframes sprite-walk-left {
+  0%   { transform: translateX(-110vw) translateY(0);    }
+  20%  { transform: translateX(-80vw)  translateY(-6px); }
+  40%  { transform: translateX(-50vw)  translateY(0);    }
+  60%  { transform: translateX(-24vw)  translateY(-5px); }
+  80%  { transform: translateX(-7vw)   translateY(-2px); }
+  100% { transform: translateX(0)      translateY(0);    }
+}
+
+/* Walk in from off-screen right */
+@keyframes sprite-walk-right {
+  0%   { transform: translateX(110vw)  translateY(0);    }
+  20%  { transform: translateX(80vw)   translateY(-6px); }
+  40%  { transform: translateX(50vw)   translateY(0);    }
+  60%  { transform: translateX(24vw)   translateY(-5px); }
+  80%  { transform: translateX(7vw)    translateY(-2px); }
+  100% { transform: translateX(0)      translateY(0);    }
+}
+
+/* Dance in place after arriving */
+@keyframes sprite-dance {
+  0%, 100% { transform: translateY(0)    rotate(-10deg) scaleX(1);    }
+  20%       { transform: translateY(-12px) rotate(10deg)  scaleX(1.1);  }
+  40%       { transform: translateY(-3px)  rotate(-6deg)  scaleX(-1);   }
+  60%       { transform: translateY(-10px) rotate(12deg)  scaleX(-1.1); }
+  80%       { transform: translateY(-1px)  rotate(-4deg)  scaleX(1);    }
+}
+
+/* Disco ball pendulum swing */
+@keyframes disco-ball-spin {
+  0%, 100% { transform: rotate(-12deg); }
+  50%       { transform: rotate(12deg);  }
+}
+
+/* Light beam flash */
+@keyframes disco-beam {
+  0%, 100% { opacity: 0;    }
+  40%, 60% { opacity: 0.55; }
+}
+
+/* Banner text colour cycle */
+@keyframes disco-shimmer {
+  0%   { color: #f472b6; }
+  17%  { color: #facc15; }
+  34%  { color: #4ade80; }
+  51%  { color: #38bdf8; }
+  68%  { color: #a78bfa; }
+  85%  { color: #fb923c; }
+  100% { color: #f472b6; }
+}
+
+/* Music notes float upward and fade */
+@keyframes sprite-float-up {
+  0%   { transform: translateY(0)    rotate(-10deg); opacity: 0;   }
+  15%  { opacity: 0.9; }
+  100% { transform: translateY(-90px) rotate(15deg);  opacity: 0; }
 }

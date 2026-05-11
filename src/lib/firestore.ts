@@ -118,6 +118,10 @@ export async function flagMatch(eventId: string, matchId: string, flags: MatchEn
   await updateDoc(doc(matchesCol(eventId), matchId), { flags });
 }
 
+export async function deleteMatch(eventId: string, matchId: string) {
+  await deleteDoc(doc(matchesCol(eventId), matchId));
+}
+
 // ─── Data Quality Queries ────────────────────────────────────────────────────
 
 export function subscribeToAllMatches(eventId: string, cb: (matches: MatchEntry[]) => void) {

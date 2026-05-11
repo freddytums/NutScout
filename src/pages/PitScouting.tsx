@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
+import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormRenderer, initFormValues } from '@/components/scouting/FormRenderer';
@@ -44,16 +45,19 @@ export function PitScouting() {
 
   if (submitted) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 p-6">
-        <div className="w-16 h-16 rounded-full bg-[hsl(var(--accent)/0.15)] flex items-center justify-center glow-green">
-          <CheckCircle2 size={36} className="text-[hsl(var(--accent))]" />
+      <>
+        <CelebrationOverlay />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 p-6">
+          <div className="w-16 h-16 rounded-full bg-[hsl(var(--accent)/0.15)] flex items-center justify-center glow-green">
+            <CheckCircle2 size={36} className="text-[hsl(var(--accent))]" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-xl font-bold">Pit Scouted!</h2>
+            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Team {teamNumber}</p>
+          </div>
+          <Button onClick={reset} size="lg">Scout Another Pit</Button>
         </div>
-        <div className="text-center">
-          <h2 className="text-xl font-bold">Pit Scouted!</h2>
-          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Team {teamNumber}</p>
-        </div>
-        <Button onClick={reset} size="lg">Scout Another Pit</Button>
-      </div>
+      </>
     );
   }
 

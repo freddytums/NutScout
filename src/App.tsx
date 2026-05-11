@@ -13,7 +13,9 @@ const Assignments = lazy(() => import('@/pages/Assignments').then((m) => ({ defa
 const Leaderboard = lazy(() => import('@/pages/Leaderboard').then((m) => ({ default: m.Leaderboard })));
 const Profile = lazy(() => import('@/pages/Profile').then((m) => ({ default: m.Profile })));
 const UserManagement = lazy(() => import('@/pages/UserManagement').then((m) => ({ default: m.UserManagement })));
+const ManageHub = lazy(() => import('@/pages/ManageHub').then((m) => ({ default: m.ManageHub })));
 const LeadDashboard = lazy(() => import('@/pages/LeadDashboard').then((m) => ({ default: m.LeadDashboard })));
+const DataManagement = lazy(() => import('@/pages/DataManagement').then((m) => ({ default: m.DataManagement })));
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })));
 
 function PageLoader() {
@@ -57,13 +59,25 @@ function App() {
               <Route index element={<Navigate to="/match" replace />} />
               <Route path="match" element={<MatchScouting />} />
               <Route path="pit" element={<PitScouting />} />
-              <Route path="map" element={<PitMap />} />
+              <Route path="pits" element={<PitMap />} />
               <Route path="assignments" element={<Assignments />} />
               <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="profile" element={<Profile />} />
-              <Route path="users" element={<UserManagement />} />
-              <Route path="dashboard" element={<LeadDashboard />} />
               <Route path="settings" element={<Settings />} />
+
+              {/* Lead / admin workspace */}
+              <Route path="manage" element={<ManageHub />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<LeadDashboard />} />
+                <Route path="data" element={<DataManagement />} />
+                <Route path="users" element={<UserManagement />} />
+              </Route>
+
+              {/* Backward-compat redirects so old links / bookmarks keep working */}
+              <Route path="map"       element={<Navigate to="/pits"             replace />} />
+              <Route path="dashboard" element={<Navigate to="/manage/dashboard" replace />} />
+              <Route path="data"      element={<Navigate to="/manage/data"      replace />} />
+              <Route path="users"     element={<Navigate to="/manage/users"     replace />} />
             </Route>
           </Routes>
         </Suspense>

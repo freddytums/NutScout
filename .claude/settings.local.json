@@ -9,7 +9,9 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "PowerShell(Copy-Item *)",
-      "PowerShell(Set-Content *)"
+      "PowerShell(Set-Content *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

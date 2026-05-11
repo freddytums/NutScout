@@ -35,10 +35,15 @@ export function usePits() {
     await unclaimPit(currentEventId, teamNumber);
   }
 
+  async function assignPit(teamNumber: number, targetUid: string, targetName: string) {
+    if (!currentEventId) return;
+    await claimPit(currentEventId, teamNumber, targetUid, targetName);
+  }
+
   async function submitPit(teamNumber: number, data: Record<string, unknown>) {
     if (!currentEventId || !user) return;
     await submitPitScouting(currentEventId, teamNumber, user.uid, data);
   }
 
-  return { pits, pitMap, loading, claim, unclaim, submitPit };
+  return { pits, pitMap, loading, claim, unclaim, assignPit, submitPit };
 }

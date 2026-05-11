@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { X, UserPlus, Clock, ChevronRight, Zap, Bell, CheckCircle2, AlertCircle, RefreshCw, Trophy } from 'lucide-react';
+import type React from 'react';
+import { X, Clock, ChevronRight, Zap, Bell, CheckCircle2, AlertCircle, RefreshCw, Trophy, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAssignments } from '@/hooks/useAssignments';
-import { useSchedule } from '@/hooks/useSchedule';
+import { useSchedule, type SlotStatus } from '@/hooks/useSchedule';
 import { useNotifications, requestNotificationPermission } from '@/hooks/useNotifications';
 import { useAuth } from '@/hooks/useAuth';
 import { useTBAStore } from '@/store/tbaStore';
@@ -31,64 +32,31 @@ function stationPosition(s: Station): 1 | 2 | 3 {
   return parseInt(s.slice(-1)) as 1 | 2 | 3;
 }
 
-// ─── Scout picker dialog ──────────────────────────────────────────────────────
-
-function ScoutPicker({ title, users, current, onPick, onClose }: {
-  title: string;
-  users: AppUser[];
-  current?: { uid: string };
-  onPick: (scout: StationAssignment | null) => void;
-  onClose: () => void;
-}) {
-  const [search, setSearch] = useState('');
-  const filtered = users.filter((u) =>
-    u.displayName.toLowerCase().includes(search.toLowerCase())
-  );
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-[hsl(var(--primary))] rounded-2xl border border-[hsl(var(--border))] flex flex-col max-h-[70vh]">
-        <div className="flex items-center justify-between p-4 border-b border-[hsl(var(--border))]">
-          <h3 className="font-semibold text-sm">{title}</h3>
-          <button type="button" onClick={onClose} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer"><X size={18} /></button>
-        </div>
-        <div className="p-3 border-b border-[hsl(var(--border))]">
-          <input autoFocus type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search..." className="w-full h-9 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]" />
-        </div>
-        <div className="overflow-y-auto flex-1 p-2">
-          {current && (
-            <button type="button" onClick={() => onPick(null)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)] cursor-pointer mb-1">
-              <X size={14} /> Remove
-            </button>
-          )}
-          {filtered.map((user) => (
-            <button key={user.uid} type="button" onClick={() => onPick({ uid: user.uid, name: user.displayName, photoURL: user.photoURL })}
-              className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer', current?.uid === user.uid ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))]' : 'hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]')}>
-              {user.photoURL ? <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full shrink-0 object-fill" /> : <div className="w-7 h-7 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-xs font-semibold shrink-0">{user.displayName[0]}</div>}
-              <span className="flex-1 text-left truncate">{user.displayName}</span>
-              {user.isPrimaryScout && <Badge variant="default" className="text-[10px] shrink-0">primary</Badge>}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Schedule row (per match) ─────────────────────────────────────────────────
 
-function ScheduleRow({ match, assignments, isSlotScouted, onReassign, onPing, isLead }: {
+function ScheduleRow({ match, assignments, getSlotStatus, onPing, isLead }: {
   match: TBAMatch;
   assignments: ReturnType<typeof useSchedule>['schedule'];
-  isSlotScouted: (matchNum: number, teamNum: number) => boolean;
-  onReassign: (station: Station) => void;
+  getSlotStatus: (matchNum: number, teamNum: number, assignedUid: string | undefined, played: boolean) => SlotStatus;
   onPing: (uid: string, scoutName: string, matchNum: number, teamNum: number) => void;
   isLead: boolean;
 }) {
   const rowAssignments = assignments?.assignments[match.key] ?? {};
   const time = match.predicted_time ?? match.time;
   const isPlayed = !!match.actual_time;
+
+  const rowBg: Record<SlotStatus, string> = {
+    scouted:       'bg-[hsl(142,60%,42%,0.1)]',
+    'scouted-other': 'bg-amber-500/08',
+    missed:        'bg-[hsl(var(--destructive)/0.07)]',
+    upcoming:      '',
+  };
+  const statusInfo: Record<SlotStatus, { icon: React.ReactNode; tooltip: string | null }> = {
+    scouted:         { icon: <CheckCircle2 size={8} className="text-[hsl(142,60%,42%)]" />, tooltip: null },
+    'scouted-other': { icon: <AlertTriangle size={8} className="text-amber-400" />, tooltip: 'Data submitted by a different scout than assigned' },
+    missed:          { icon: <AlertCircle size={8} className="text-[hsl(var(--destructive))]" />, tooltip: 'Match was played but no data was submitted' },
+    upcoming:        { icon: null, tooltip: null },
+  };
 
   return (
     <div className="border-b border-[hsl(var(--border)/0.4)] last:border-0">
@@ -103,15 +71,12 @@ function ScheduleRow({ match, assignments, isSlotScouted, onReassign, onPing, is
           const alliance = stationAlliance(station);
           const teamKey = match.alliances[alliance].team_keys[stationPosition(station) - 1];
           const teamNum = teamKey ? teamNumberFromKey(teamKey) : null;
-          const scouted = teamNum ? isSlotScouted(match.match_number, teamNum) : false;
+          const status = teamNum ? getSlotStatus(match.match_number, teamNum, slot?.uid, isPlayed) : 'upcoming';
 
           return (
             <div
               key={station}
-              className={cn(
-                'flex flex-col items-center gap-0.5 p-1 min-h-[52px] text-center',
-                scouted ? 'bg-[hsl(var(--accent)/0.08)]' : isPlayed && slot ? 'bg-[hsl(var(--destructive)/0.06)]' : ''
-              )}
+              className={cn('flex flex-col items-center gap-0.5 p-1 min-h-[52px] text-center', rowBg[status])}
             >
               {teamNum && (
                 <span className={cn('font-data text-[10px] font-bold', alliance === 'red' ? 'text-red-400' : 'text-blue-400')}>
@@ -119,11 +84,7 @@ function ScheduleRow({ match, assignments, isSlotScouted, onReassign, onPing, is
                 </span>
               )}
               {slot ? (
-                <button
-                  type="button"
-                  onClick={() => isLead && onReassign(station)}
-                  className={cn('flex flex-col items-center gap-0.5 w-full rounded transition-colors', isLead && 'hover:bg-[hsl(var(--muted)/0.5)] cursor-pointer')}
-                >
+                <div className="flex flex-col items-center gap-0.5 w-full rounded">
                   {slot.photoURL ? (
                     <img src={slot.photoURL} alt="" className="w-5 h-5 rounded-full object-fill" />
                   ) : (
@@ -134,13 +95,10 @@ function ScheduleRow({ match, assignments, isSlotScouted, onReassign, onPing, is
                   <span className="text-[9px] leading-tight truncate max-w-[40px] text-[hsl(var(--foreground))]">
                     {slot.name.split(' ')[0]}
                   </span>
-                  {scouted && <CheckCircle2 size={8} className="text-[hsl(var(--accent))]" />}
-                  {isPlayed && !scouted && <AlertCircle size={8} className="text-[hsl(var(--destructive))]" />}
-                </button>
-              ) : isLead ? (
-                <button type="button" onClick={() => onReassign(station)} className="flex-1 flex items-center justify-center w-full cursor-pointer hover:bg-[hsl(var(--muted)/0.5)] rounded">
-                  <UserPlus size={10} className="text-[hsl(var(--muted-foreground))]" />
-                </button>
+                  {statusInfo[status].tooltip ? (
+                    <span title={statusInfo[status].tooltip} className="cursor-help">{statusInfo[status].icon}</span>
+                  ) : statusInfo[status].icon}
+                </div>
               ) : (
                 <span className="text-[10px] text-[hsl(var(--muted-foreground))]">—</span>
               )}
@@ -171,18 +129,33 @@ function AutoGeneratePanel({ onGenerate, primaryCount }: {
   const [method, setMethod] = useState<ScheduleMethod>('rotate-3');
   const [sort, setSort] = useState<'alpha' | 'experience'>('alpha');
   const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState(false);
 
   const methods: { value: ScheduleMethod; label: string; desc: string }[] = [
-    { value: 'fixed', label: 'Fixed', desc: 'Same 6 scouts for all matches' },
-    { value: 'rotate-1', label: 'Rotate every match', desc: 'Swap groups each match' },
-    { value: 'rotate-2', label: 'Rotate every 2', desc: 'Groups switch every 2 matches' },
-    { value: 'rotate-3', label: 'Rotate every 3', desc: 'Groups switch every 3 matches (recommended)' },
-    { value: 'time-block', label: '30-min blocks', desc: 'Groups based on match schedule time' },
+    { value: 'fixed',    label: 'Fixed stations',       desc: 'All scouts active every match. Best with exactly 6 scouts.' },
+    { value: 'rotate-1', label: 'Rotate every match',   desc: 'Groups swap after every single match. High scout variety, more complex.' },
+    { value: 'rotate-2', label: 'Rotate every 2',       desc: 'Groups switch every 2 matches. Balanced rest with frequent changes.' },
+    { value: 'rotate-3', label: 'Rotate every 3 ★',    desc: 'Recommended. Groups switch every 3 matches — good rest, consistent coverage.' },
+    { value: 'time-block', label: '30-min time blocks', desc: 'Groups rotate by scheduled time, not match count. Needs TBA schedule loaded.' },
+    { value: 'alt-halves', label: 'Alternate halves',   desc: 'One group covers the first half of quals, another covers the second. Good for morning/afternoon crews.' },
+    { value: 'snake',    label: 'Snake rotation',       desc: 'Groups cycle A → B → C → C → B → A → repeat. Smooth transitions, no hard cutoffs.' },
+  ];
+
+  const sortOptions: { value: 'alpha' | 'experience'; label: string; desc: string }[] = [
+    { value: 'alpha',      label: 'Alphabetical', desc: 'Scouts assigned to stations in A–Z order.' },
+    { value: 'experience', label: 'By experience', desc: 'Scouts with the most submitted matches are placed at Red 1 and Blue 1 (primary positions) first. Puts your most active scouts in the top spots.' },
   ];
 
   async function handle() {
     setGenerating(true);
-    try { await onGenerate(method, sort); } finally { setGenerating(false); }
+    setGenerated(false);
+    try {
+      await onGenerate(method, sort);
+      setGenerated(true);
+      setTimeout(() => setGenerated(false), 5000);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   return (
@@ -190,42 +163,51 @@ function AutoGeneratePanel({ onGenerate, primaryCount }: {
       <div className="flex items-center gap-2 text-sm">
         <span className="text-[hsl(var(--muted-foreground))]">Primary scouts:</span>
         <Badge variant={primaryCount >= 6 ? 'default' : 'amber'}>{primaryCount} selected</Badge>
-        {primaryCount < 6 && <span className="text-xs text-amber-400">Need at least 6</span>}
+        {primaryCount < 6 && <span className="text-xs text-amber-400">Need at least 6 for a full rotation</span>}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-[hsl(var(--muted-foreground))]">Scheduling method</label>
+        <label className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Scheduling method</label>
         <div className="flex flex-col gap-1.5">
           {methods.map(({ value, label, desc }) => (
             <button key={value} type="button" onClick={() => setMethod(value)}
               className={cn('flex flex-col items-start px-3 py-2.5 rounded-lg border text-left transition-all cursor-pointer',
-                method === value ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--foreground))]' : 'border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]')}>
+                method === value ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.08)] text-[hsl(var(--foreground))]' : 'border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]')}>
               <span className="text-sm font-medium">{label}</span>
-              <span className="text-xs mt-0.5">{desc}</span>
+              <span className="text-xs mt-0.5 leading-snug">{desc}</span>
             </button>
           ))}
         </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs text-[hsl(var(--muted-foreground))]">Station assignment order</label>
-        <div className="flex gap-2">
-          {[{ value: 'alpha', label: 'Alphabetical' }, { value: 'experience', label: 'By experience' }].map(({ value, label }) => (
-            <button key={value} type="button" onClick={() => setSort(value as typeof sort)}
-              className={cn('flex-1 h-10 rounded-lg border text-sm transition-all cursor-pointer', sort === value ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]')}>
-              {label}
+        <label className="text-xs font-medium text-[hsl(var(--muted-foreground))]">Station assignment order</label>
+        <div className="flex flex-col gap-1.5">
+          {sortOptions.map(({ value, label, desc }) => (
+            <button key={value} type="button" onClick={() => setSort(value)}
+              className={cn('flex flex-col items-start px-3 py-2.5 rounded-lg border text-left transition-all cursor-pointer',
+                sort === value ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.08)] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]')}>
+              <span className="text-sm font-medium">{label}</span>
+              <span className="text-xs mt-0.5 leading-snug">{desc}</span>
             </button>
           ))}
         </div>
       </div>
 
       <p className="text-xs text-[hsl(var(--muted-foreground))]">
-        Each scout keeps the same station (Red/Blue) throughout their active blocks.
+        Each scout keeps the same alliance color throughout their active blocks. All primary scouts are notified when the schedule is published.
       </p>
 
       <Button onClick={handle} loading={generating} disabled={primaryCount < 1} className="gap-2 w-full">
         <RefreshCw size={14} /> Generate Full Schedule
       </Button>
+
+      {generated && (
+        <div className="flex items-center gap-2 rounded-lg border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.08)] px-3 py-2.5">
+          <CheckCircle2 size={14} className="text-[hsl(var(--accent))] shrink-0" />
+          <span className="text-sm text-[hsl(var(--accent))]">Schedule generated — all primary scouts notified.</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -234,7 +216,7 @@ function AutoGeneratePanel({ onGenerate, primaryCount }: {
 
 function MySchedule({ uid, myStation }: { uid: string; myStation: Station | null }) {
   const { matches: tbaMatches } = useTBAStore();
-  const { schedule, isSlotScouted } = useSchedule();
+  const { schedule, getSlotStatus } = useSchedule();
   const navigate = useNavigate();
 
   const upcoming = useMemo(() => {
@@ -283,7 +265,8 @@ function MySchedule({ uid, myStation }: { uid: string; myStation: Station | null
       </CardHeader>
       <CardContent className="flex flex-col divide-y divide-[hsl(var(--border)/0.5)]">
         {rows.map(({ match, station, teamNum }) => {
-          const scouted = teamNum ? isSlotScouted(match.match_number, teamNum) : false;
+          const status = teamNum ? getSlotStatus(match.match_number, teamNum, undefined, !!match.actual_time) : 'upcoming';
+          const scouted = status === 'scouted' || status === 'scouted-other';
           const time = match.predicted_time ?? match.time;
           return (
             <button key={match.key} type="button"
@@ -312,40 +295,81 @@ function MySchedule({ uid, myStation }: { uid: string; myStation: Station | null
 // ─── Notifications panel ──────────────────────────────────────────────────────
 
 function NotificationsPanel() {
-  const { notifications, markRead, clear } = useNotifications();
-  const [notifEnabled, setNotifEnabled] = useState(Notification.permission === 'granted');
+  const { notifications, clear } = useNotifications();
+  const notificationsSupported = typeof Notification !== 'undefined';
+  const [notifEnabled, setNotifEnabled] = useState(
+    notificationsSupported && Notification.permission === 'granted'
+  );
+  const [clearing, setClearing] = useState<string | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
 
   async function enableNotifications() {
     const ok = await requestNotificationPermission();
     setNotifEnabled(ok);
   }
 
-  if (notifications.length === 0 && notifEnabled) return null;
+  async function handleClear(id: string) {
+    setClearing(id);
+    setClearError(null);
+    try {
+      await clear(id);
+    } catch {
+      setClearError('Could not dismiss — check your connection.');
+    } finally {
+      setClearing(null);
+    }
+  }
+
+  if (notifications.length === 0 && (notifEnabled || !notificationsSupported)) return null;
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center gap-2 pb-2">
-        <Bell size={15} className="text-[hsl(var(--accent))]" />
-        <CardTitle>Notifications</CardTitle>
+      <CardHeader className="flex-row items-center justify-between gap-2 pb-2">
+        <div className="flex items-center gap-2">
+          <Bell size={15} className="text-[hsl(var(--accent))]" />
+          <CardTitle>Notifications</CardTitle>
+        </div>
+        {notifications.length > 1 && (
+          <button
+            type="button"
+            onClick={() => notifications.forEach((n) => n.id && handleClear(n.id))}
+            className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer"
+          >
+            Clear all
+          </button>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        {!notifEnabled && (
+        {!notifEnabled && notificationsSupported && (
           <div className="flex items-center justify-between gap-2 py-1">
             <span className="text-xs text-[hsl(var(--muted-foreground))]">Enable match reminders</span>
             <Button size="sm" variant="secondary" onClick={enableNotifications}>Enable</Button>
           </div>
         )}
-        {notifications.slice(0, 5).map((n) => (
-          <div key={n.id} className={cn('flex items-start gap-2 py-2 rounded-lg px-2', !n.read && 'bg-[hsl(var(--accent)/0.06)]')}>
+        {notifications.slice(0, 10).map((n) => (
+          <div key={n.id} className={cn(
+            'flex items-start gap-2 py-2 rounded-lg px-2 transition-opacity',
+            !n.read && 'bg-[hsl(var(--accent)/0.06)]',
+            clearing === n.id && 'opacity-40 pointer-events-none'
+          )}>
             <div className="flex-1 min-w-0">
-              <p className="text-sm">{n.message}</p>
+              <p className="text-sm leading-snug">{n.message}</p>
               <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">from {n.fromName}</p>
             </div>
-            <button type="button" onClick={async () => { await markRead(n.id!); await clear(n.id!); }} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer shrink-0 mt-0.5">
+            <button
+              type="button"
+              onClick={() => n.id && handleClear(n.id)}
+              disabled={clearing === n.id}
+              aria-label="Dismiss notification"
+              className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer shrink-0 mt-0.5 disabled:pointer-events-none"
+            >
               <X size={14} />
             </button>
           </div>
         ))}
+        {clearError && (
+          <p className="text-xs text-[hsl(var(--destructive))]" role="alert">{clearError}</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -353,15 +377,14 @@ function NotificationsPanel() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'my' | 'stations' | 'schedule' | 'generate';
+type Tab = 'my' | 'schedule' | 'generate';
 
 export function Assignments() {
   const { user } = useAuth();
-  const { assignments, assign } = useAssignments();
-  const { schedule, users, primaryScouts, generate, isSlotScouted } = useSchedule();
+  const { assignments } = useAssignments();
+  const { schedule, users, primaryScouts, generate, getSlotStatus } = useSchedule();
   const { send: sendNotif } = useNotifications();
   const { matches: tbaMatches } = useTBAStore();
-  const [picking, setPicking] = useState<{ station: Station; matchKey?: string } | null>(null);
   const [tab, setTab] = useState<Tab>('my');
 
   if (!user) return null;
@@ -378,12 +401,6 @@ export function Assignments() {
     [tbaMatches]
   );
 
-  async function handleStationPick(scout: StationAssignment | null) {
-    if (!picking) return;
-    await assign(picking.station, scout);
-    setPicking(null);
-  }
-
   async function handlePing(uid: string, _scoutName: string, matchNum: number, teamNum: number) {
     await sendNotif(uid, `Reminder: Scout Q${matchNum} (Team ${teamNum})`, { matchNumber: matchNum, teamNumber: teamNum });
   }
@@ -394,7 +411,6 @@ export function Assignments() {
 
   const tabs: { id: Tab; label: string; leadOnly?: boolean }[] = [
     { id: 'my', label: 'My Schedule' },
-    { id: 'stations', label: 'Stations' },
     { id: 'schedule', label: 'Full Schedule', leadOnly: true },
     { id: 'generate', label: 'Auto-Generate', leadOnly: true },
   ];
@@ -402,9 +418,11 @@ export function Assignments() {
   const visibleTabs = tabs.filter((t) => !t.leadOnly || isLead);
 
   return (
-    <div className="flex flex-col max-w-2xl mx-auto">
-      {/* Tab bar */}
-      <div className="flex border-b border-[hsl(var(--border))] bg-[hsl(var(--primary))] backdrop-blur-md sticky top-14 z-30">
+    /* Self-contained height — tab bar sits above a scrollable content area so
+       it never overlaps content and doesn't rely on the page's sticky positioning */
+    <div className="flex flex-col max-w-2xl mx-auto" style={{ height: 'calc(100dvh - 7.5rem)' }}>
+      {/* Tab bar — fixed in layout, NOT sticky */}
+      <div className="flex border-b border-[hsl(var(--border))] bg-[hsl(var(--primary))] shrink-0">
         {visibleTabs.map((t) => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}
             className={cn('flex-1 py-3 text-xs font-medium transition-colors cursor-pointer',
@@ -414,6 +432,8 @@ export function Assignments() {
         ))}
       </div>
 
+      {/* Scrollable content — independent of the page scroll */}
+      <div className="flex-1 overflow-y-auto min-h-0">
       <div className="p-4 flex flex-col gap-4">
         {/* ── My Schedule tab ── */}
         {tab === 'my' && (
@@ -439,58 +459,6 @@ export function Assignments() {
           </>
         )}
 
-        {/* ── Stations tab ── */}
-        {tab === 'stations' && (
-          <>
-            <Card>
-              <CardHeader><CardTitle>Driver Stations</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-2">
-                  {STATIONS.map((station) => {
-                    const a = assignments[station];
-                    const alliance = stationAlliance(station);
-                    return (
-                      <button key={station} type="button" onClick={() => isLead && setPicking({ station })}
-                        className={cn('flex flex-col items-center gap-2 p-3 rounded-xl border text-center transition-all',
-                          isLead && 'cursor-pointer active:scale-95',
-                          alliance === 'red' ? 'border-red-500/40 bg-red-500/05' : 'border-blue-500/40 bg-blue-500/05',
-                          !a && isLead && 'border-dashed opacity-70')}>
-                        <span className={cn('text-xs font-semibold', alliance === 'red' ? 'text-red-400' : 'text-blue-400')}>{STATION_LABELS[station]}</span>
-                        {a ? (<>
-                          {a.photoURL ? <img src={a.photoURL} alt="" className="w-8 h-8 rounded-full object-fill" /> : <div className="w-8 h-8 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-sm font-semibold">{a.name[0]}</div>}
-                          <span className="text-xs font-medium truncate max-w-full">{a.name.split(' ')[0]}</span>
-                        </>) : (
-                          <><div className="w-8 h-8 rounded-full border-2 border-dashed border-[hsl(var(--border))] flex items-center justify-center">{isLead && <UserPlus size={14} className="text-[hsl(var(--muted-foreground))]" />}</div><span className="text-xs text-[hsl(var(--muted-foreground))]">{isLead ? 'Assign' : '—'}</span></>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            {isLead && (
-              <Card>
-                <CardHeader><CardTitle>Primary Scouts</CardTitle></CardHeader>
-                <CardContent className="flex flex-col gap-1">
-                  <p className="text-xs text-[hsl(var(--muted-foreground))] mb-2">Primary scouts appear in the auto-scheduler. Toggle to add/remove.</p>
-                  {users.map((u) => (
-                    <div key={u.uid} className="flex items-center gap-3 py-1.5">
-                      {u.photoURL ? <img src={u.photoURL} alt="" className="w-7 h-7 rounded-full shrink-0 object-fill" /> : <div className="w-7 h-7 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-xs shrink-0">{u.displayName[0]}</div>}
-                      <span className="flex-1 text-sm">{u.displayName}</span>
-                      <button type="button" onClick={() => togglePrimary(u)}
-                        className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer',
-                          u.isPrimaryScout ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]')}>
-                        {u.isPrimaryScout ? 'Primary' : 'Add'}
-                      </button>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-          </>
-        )}
-
         {/* ── Full Schedule tab (lead) ── */}
         {tab === 'schedule' && isLead && (
           <>
@@ -499,7 +467,7 @@ export function Assignments() {
             ) : (
               /* Self-contained scroll container — sticky header lives inside, no viewport collision */
               <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-                <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: 'calc(100dvh - 11rem)' }}>
+                <div className="no-scrollbar overflow-y-auto overflow-x-auto" style={{ maxHeight: 'calc(100dvh - 13rem)' }}>
                   {/* Sticky column header within this scroll container */}
                   <div className="grid grid-cols-6 sticky top-0 z-10 border-b border-[hsl(var(--border))]">
                     {STATIONS.map((s) => (
@@ -513,8 +481,7 @@ export function Assignments() {
                       key={match.key}
                       match={match}
                       assignments={schedule}
-                      isSlotScouted={isSlotScouted}
-                      onReassign={(station) => setPicking({ station, matchKey: match.key })}
+                      getSlotStatus={getSlotStatus}
                       onPing={handlePing}
                       isLead={isLead}
                     />
@@ -524,8 +491,9 @@ export function Assignments() {
             )}
 
             <div className="flex gap-3 text-xs text-[hsl(var(--muted-foreground))] flex-wrap">
-              <span className="flex items-center gap-1"><CheckCircle2 size={10} className="text-[hsl(var(--accent))]" /> Scouted</span>
-              <span className="flex items-center gap-1"><AlertCircle size={10} className="text-[hsl(var(--destructive))]" /> Missed</span>
+              <span className="flex items-center gap-1"><CheckCircle2 size={10} className="text-[hsl(142,60%,42%)]" /> Scouted by assigned</span>
+              <span className="flex items-center gap-1"><AlertTriangle size={10} className="text-amber-400" /> Data exists, different scout</span>
+              <span className="flex items-center gap-1"><AlertCircle size={10} className="text-[hsl(var(--destructive))]" /> No data</span>
               <span className="flex items-center gap-1"><Bell size={10} /> Ping scout</span>
             </div>
           </>
@@ -533,23 +501,33 @@ export function Assignments() {
 
         {/* ── Auto-generate tab (lead) ── */}
         {tab === 'generate' && isLead && (
-          <AutoGeneratePanel
-            primaryCount={primaryScouts.length}
-            onGenerate={generate}
-          />
+          <>
+            <Card>
+              <CardHeader><CardTitle>Primary Scouts</CardTitle></CardHeader>
+              <CardContent className="flex flex-col gap-1">
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mb-2">Primary scouts appear in the auto-scheduler. Toggle to add/remove.</p>
+                {users.map((u) => (
+                  <div key={u.uid} className="flex items-center gap-3 py-1.5">
+                    {u.photoURL ? <img src={u.photoURL} alt="" className="w-7 h-7 rounded-full shrink-0 object-fill" /> : <div className="w-7 h-7 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-xs shrink-0">{u.displayName[0]}</div>}
+                    <span className="flex-1 text-sm">{u.displayName}</span>
+                    <button type="button" onClick={() => togglePrimary(u)}
+                      className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer',
+                        u.isPrimaryScout ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]')}>
+                      {u.isPrimaryScout ? 'Primary' : 'Add'}
+                    </button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <AutoGeneratePanel
+              primaryCount={primaryScouts.length}
+              onGenerate={generate}
+            />
+          </>
         )}
       </div>
+      </div>{/* end scrollable content */}
 
-      {/* Station picker */}
-      {picking && !picking.matchKey && (
-        <ScoutPicker
-          title={`Assign ${STATION_LABELS[picking.station]}`}
-          users={users}
-          current={assignments[picking.station]}
-          onPick={handleStationPick}
-          onClose={() => setPicking(null)}
-        />
-      )}
     </div>
   );
 }

@@ -79,7 +79,7 @@ service cloud.firestore {
       // ── Pit entries ──────────────────────────────────────────────
       match /pits/{teamNumber} {
         allow read: if isSignedIn();
-        allow create: if isLead();
+        allow create, delete: if isLead();
 
         allow update: if isSignedIn() && (
           resource.data.status == 'unclaimed'

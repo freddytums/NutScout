@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, ChevronRight, Search, Zap } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Zap } from 'lucide-react';
+import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormRenderer, initFormValues } from '@/components/scouting/FormRenderer';
@@ -9,7 +10,7 @@ import { useTBAStore } from '@/store/tbaStore';
 import { useAssignments } from '@/hooks/useAssignments';
 import { useAuth } from '@/hooks/useAuth';
 import { getGameConfig } from '@/config/games';
-import { matchLabel, teamNumberFromKey, sortMatches } from '@/lib/tba';
+import { teamNumberFromKey, sortMatches } from '@/lib/tba';
 import type { MatchEntry, Station } from '@/types/scout';
 import type { TBAMatch } from '@/lib/tba';
 import { cn } from '@/lib/utils';
@@ -25,25 +26,27 @@ const STEP_LABELS: Record<Step, string> = {
   done: 'Submitted',
 };
 
-function MatchPicker({ onSelect }: {
+function MatchPicker({ onSelect, scoutedSet }: {
   onSelect: (match: TBAMatch, teamNumber: number, alliance: 'red' | 'blue', position: 1 | 2 | 3) => void;
+  scoutedSet: Set<string>;
 }) {
   const { matches } = useTBAStore();
   const [search, setSearch] = useState('');
   const [selectedTeam, setSelectedTeam] = useState('');
 
   const qualMatches = useMemo(
-    () => matches.filter((m) => m.comp_level === 'qm'),
+    () => sortMatches(matches.filter((m) => m.comp_level === 'qm')),
     [matches]
   );
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.trim();
     return qualMatches.filter((m) => {
-      const label = matchLabel(m).toLowerCase();
-      const hasTeam = !selectedTeam || m.alliances.red.team_keys.includes(`frc${selectedTeam}`) ||
+      const hasMatch = !q || String(m.match_number).startsWith(q);
+      const hasTeam = !selectedTeam ||
+        m.alliances.red.team_keys.includes(`frc${selectedTeam}`) ||
         m.alliances.blue.team_keys.includes(`frc${selectedTeam}`);
-      return label.includes(q) && hasTeam;
+      return hasMatch && hasTeam;
     });
   }, [qualMatches, search, selectedTeam]);
 
@@ -55,59 +58,85 @@ function MatchPicker({ onSelect }: {
         Pick from TBA schedule — tap your team in a match
       </p>
       <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search match..."
-            className="w-full h-9 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] pl-8 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--primary))]"
-          />
-        </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Q##..."
+          className="w-20 h-8 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 text-sm font-data focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--primary))]"
+        />
         <input
           value={selectedTeam}
           onChange={(e) => setSelectedTeam(e.target.value)}
           placeholder="Team #"
           type="number"
           inputMode="numeric"
-          className="w-24 h-9 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 text-sm font-data focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--primary))]"
+          className="w-24 h-8 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 text-sm font-data focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--primary))]"
         />
       </div>
-      <div className="flex flex-col gap-1.5 max-h-60 overflow-y-auto pr-1">
-        {filtered.slice(0, 30).map((match) => (
-          <div key={match.key} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] overflow-hidden">
-            <div className="px-3 py-1.5 text-xs font-semibold font-data text-[hsl(var(--muted-foreground))] border-b border-[hsl(var(--border)/0.5)]">
-              {matchLabel(match)}
-            </div>
-            <div className="grid grid-cols-2 divide-x divide-[hsl(var(--border)/0.5)]">
-              {(['red', 'blue'] as const).map((alliance) => (
-                <div key={alliance} className="flex flex-col gap-1 p-1.5">
-                  {match.alliances[alliance].team_keys.map((key, idx) => {
-                    const tn = teamNumberFromKey(key);
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => onSelect(match, tn, alliance, (idx + 1) as 1 | 2 | 3)}
-                        className={cn(
-                          'text-xs font-data py-1.5 px-2 rounded cursor-pointer transition-all active:scale-95 min-h-[36px]',
-                          alliance === 'red'
-                            ? 'bg-red-500/10 text-red-400 hover:bg-red-500/25 border border-red-500/20'
-                            : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/25 border border-blue-500/20'
-                        )}
-                      >
-                        {tn}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+
+      <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+        <div className="overflow-y-auto max-h-48">
+          {/* Sticky column header */}
+          <div
+            className="grid sticky top-0 z-10 border-b border-[hsl(var(--border))]"
+            style={{ gridTemplateColumns: '2.5rem repeat(3,1fr) repeat(3,1fr)' }}
+          >
+            <div className="bg-[hsl(var(--muted))]" />
+            {(['R1', 'R2', 'R3'] as const).map((s) => (
+              <div key={s} className="py-1 text-center text-[9px] font-bold bg-red-500/20 text-red-400">{s}</div>
+            ))}
+            {(['B1', 'B2', 'B3'] as const).map((s) => (
+              <div key={s} className="py-1 text-center text-[9px] font-bold bg-blue-500/20 text-blue-400">{s}</div>
+            ))}
           </div>
-        ))}
-        {filtered.length === 0 && (
-          <p className="text-xs text-[hsl(var(--muted-foreground))] text-center py-3">No matches found</p>
-        )}
+
+          {/* Match rows */}
+          {filtered.slice(0, 60).map((match) => (
+            <div
+              key={match.key}
+              className="grid border-b border-[hsl(var(--border)/0.3)] last:border-0"
+              style={{ gridTemplateColumns: '2.5rem repeat(3,1fr) repeat(3,1fr)' }}
+            >
+              <div className="flex items-center justify-center bg-[hsl(var(--muted)/0.5)]">
+                <span className="font-data text-[9px] font-bold text-[hsl(var(--muted-foreground))]">
+                  Q{match.match_number}
+                </span>
+              </div>
+              {(['red', 'blue'] as const).map((alliance) =>
+                match.alliances[alliance].team_keys.map((key, idx) => {
+                  const tn = teamNumberFromKey(key);
+                  const isScouted = scoutedSet.has(`${match.match_number}-${tn}`);
+                  const isTarget = !!selectedTeam && tn === parseInt(selectedTeam);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => onSelect(match, tn, alliance, (idx + 1) as 1 | 2 | 3)}
+                      className={cn(
+                        'py-1.5 text-[10px] font-data text-center transition-all cursor-pointer active:scale-95',
+                        isScouted
+                          ? 'bg-[hsl(142,60%,42%,0.25)] text-[hsl(142,60%,55%)] font-bold'
+                          : isTarget
+                          ? alliance === 'red'
+                            ? 'bg-red-500/25 text-red-400 font-semibold'
+                            : 'bg-blue-500/25 text-blue-400 font-semibold'
+                          : alliance === 'red'
+                          ? 'text-red-400/70 hover:bg-red-500/10'
+                          : 'text-blue-400/70 hover:bg-blue-500/10'
+                      )}
+                    >
+                      {tn}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          ))}
+
+          {filtered.length === 0 && (
+            <p className="text-xs text-[hsl(var(--muted-foreground))] text-center py-3">No matches found</p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -115,7 +144,7 @@ function MatchPicker({ onSelect }: {
 
 export function MatchScouting() {
   const { currentEvent } = useEventStore();
-  const { submit } = useMatches();
+  const { submit, matches: submittedMatches } = useMatches();
   const { matches: tbaMatches } = useTBAStore();
   const { assignments } = useAssignments();
   const { user } = useAuth();
@@ -123,12 +152,18 @@ export function MatchScouting() {
   const [step, setStep] = useState<Step>('meta');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [showMatchPicker, setShowMatchPicker] = useState(false);
 
   const gameYear = currentEvent?.activeGameYear ?? 2026;
   const game = getGameConfig(gameYear);
 
   const hasTBASchedule = tbaMatches.length > 0;
+
+  const scoutedSet = useMemo(
+    () => new Set(submittedMatches.map((m) => `${m.matchNumber}-${m.teamNumber}`)),
+    [submittedMatches]
+  );
 
   // Find this user's station assignment
   const myStation = useMemo(() =>
@@ -209,6 +244,7 @@ export function MatchScouting() {
 
   async function handleSubmit() {
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await submit(
         { ...autoValues, ...teleopValues, ...endgameValues },
@@ -218,11 +254,14 @@ export function MatchScouting() {
           matchType: meta.matchType,
           alliance: meta.alliance,
           alliancePosition: meta.alliancePosition,
-          notes: meta.notes || undefined,
+          // Omit notes entirely when empty — Firestore rejects undefined field values
+          ...(meta.notes ? { notes: meta.notes } : {}),
         }
       );
       setSubmitted(true);
       setStep('done');
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to submit. Check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -239,18 +278,21 @@ export function MatchScouting() {
 
   if (submitted) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 p-6">
-        <div className="w-16 h-16 rounded-full bg-[hsl(var(--accent)/0.15)] flex items-center justify-center glow-green">
-          <CheckCircle2 size={36} className="text-[hsl(var(--accent))]" />
+      <>
+        <CelebrationOverlay />
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 p-6">
+          <div className="w-16 h-16 rounded-full bg-[hsl(var(--accent)/0.15)] flex items-center justify-center glow-green">
+            <CheckCircle2 size={36} className="text-[hsl(var(--accent))]" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-xl font-bold">Submitted!</h2>
+            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
+              Team {meta.teamNumber} · Match {meta.matchNumber}
+            </p>
+          </div>
+          <Button onClick={reset} size="lg">Scout Another Match</Button>
         </div>
-        <div className="text-center">
-          <h2 className="text-xl font-bold">Submitted!</h2>
-          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-            Team {meta.teamNumber} · Match {meta.matchNumber}
-          </p>
-        </div>
-        <Button onClick={reset} size="lg">Scout Another Match</Button>
-      </div>
+      </>
     );
   }
 
@@ -327,6 +369,7 @@ export function MatchScouting() {
                 )}
                 {showMatchPicker && (
                   <MatchPicker
+                    scoutedSet={scoutedSet}
                     onSelect={(match, teamNumber, alliance, position) => {
                       setMeta((m) => ({
                         ...m,
@@ -472,6 +515,12 @@ export function MatchScouting() {
             />
           </CardContent>
         </Card>
+      )}
+
+      {submitError && (
+        <div className="rounded-lg border border-[hsl(var(--destructive)/0.5)] bg-[hsl(var(--destructive)/0.08)] px-3 py-2.5 text-sm text-[hsl(var(--destructive))]">
+          {submitError}
+        </div>
       )}
 
       {/* Navigation */}

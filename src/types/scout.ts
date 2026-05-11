@@ -26,7 +26,14 @@ export interface ScoutNotification {
   read: boolean;
 }
 
-export type ScheduleMethod = 'fixed' | 'rotate-1' | 'rotate-2' | 'rotate-3' | 'time-block';
+export type ScheduleMethod =
+  | 'fixed'
+  | 'rotate-1'
+  | 'rotate-2'
+  | 'rotate-3'
+  | 'time-block'
+  | 'alt-halves'
+  | 'snake';
 
 export interface ScheduledSlot {
   uid: string;

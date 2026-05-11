@@ -1,7 +1,7 @@
 import type { MatchEntry } from '@/types/scout';
 
 export interface DataIssue {
-  type: 'missing' | 'duplicate' | 'outlier' | 'incomplete';
+  type: 'missing' | 'outlier' | 'incomplete';
   severity: 'error' | 'warning';
   teamNumber?: number;
   matchNumber?: number;
@@ -10,34 +10,6 @@ export interface DataIssue {
   message: string;
   value?: number;
   expected?: string;
-}
-
-// Detect duplicate match entries (same team + match + alliance)
-export function findDuplicates(matches: MatchEntry[]): DataIssue[] {
-  const seen = new Map<string, MatchEntry[]>();
-  matches.forEach((m) => {
-    const key = `${m.teamNumber}-${m.matchNumber}-${m.matchType}-${m.alliance}`;
-    if (!seen.has(key)) seen.set(key, []);
-    seen.get(key)!.push(m);
-  });
-
-  const issues: DataIssue[] = [];
-  seen.forEach((entries, key) => {
-    if (entries.length > 1) {
-      const [team, match] = key.split('-');
-      entries.forEach((e) => {
-        issues.push({
-          type: 'duplicate',
-          severity: 'error',
-          teamNumber: parseInt(team),
-          matchNumber: parseInt(match),
-          matchId: e.id,
-          message: `Team ${team} has ${entries.length} entries for match ${match}`,
-        });
-      });
-    }
-  });
-  return issues;
 }
 
 // Find outliers using IQR method on numeric fields
@@ -97,7 +69,6 @@ export function findMissingCoverage(
 
 export function runAllChecks(matches: MatchEntry[], expectedTeams: number[]): DataIssue[] {
   const issues: DataIssue[] = [
-    ...findDuplicates(matches),
     ...findMissingCoverage(matches, expectedTeams),
     ...findOutliers(matches, 'teleop_coral_l4', 'L4 coral'),
     ...findOutliers(matches, 'teleop_coral_l3', 'L3 coral'),

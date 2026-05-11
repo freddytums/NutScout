@@ -2,10 +2,12 @@ import {
   collection,
   doc,
   setDoc,
+  getDocs,
   writeBatch,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { useTBAStore } from '@/store/tbaStore';
 import type { EventConfig } from '@/types/scout';
 
 // ─── Teams ───────────────────────────────────────────────────────────────────
@@ -44,9 +46,9 @@ function rBool(prob: number) { return rng() < prob; }
 
 function matchData(teamNum: number, matchNum: number) {
   const s = skill(teamNum);
-  // Introduce one real outlier in match 7 for 254 (tests lead dashboard detection)
-  const isOutlier = teamNum === 254 && matchNum === 7;
-  const mult = isOutlier ? 3 : 1;
+  // One subtle outlier in match 22 for team 1678 — detectable but not absurd
+  const isOutlier = teamNum === 1678 && matchNum === 22;
+  const mult = isOutlier ? 1.8 : 1;
 
   return {
     auto_leave:          rBool(0.6 + s * 0.35),
@@ -93,12 +95,29 @@ function buildSchedule(): { matchNumber: number; red: number[]; blue: number[] }
 // ─── Main seeder ─────────────────────────────────────────────────────────────
 
 const EVENT_ID = 'demo-2026';
-const COMPLETED_MATCHES = 18; // how many quals are "done"
+const COMPLETED_MATCHES = 25; // halfway through 50 quals
 const NOW_UNIX = Math.floor(Date.now() / 1000);
 const MATCH_INTERVAL = 8 * 60; // 8 minutes between matches
 
+async function clearDemoEvent() {
+  // Only matches need deletion — they use auto-generated IDs so re-seeding would stack.
+  // Pits use deterministic team-number IDs and are overwritten by setDoc below.
+  const snap = await getDocs(collection(db, 'events', EVENT_ID, 'matches'));
+  if (snap.empty) return;
+  let batch = writeBatch(db);
+  let count = 0;
+  for (const d of snap.docs) {
+    batch.delete(d.ref);
+    if (++count >= 400) { await batch.commit(); batch = writeBatch(db); count = 0; }
+  }
+  if (count > 0) await batch.commit();
+}
+
 export async function seedDemoEvent(): Promise<EventConfig> {
   seed = 42; // reset for determinism
+
+  // ── Wipe previous demo data so re-seeding starts clean ─────────────────────
+  await clearDemoEvent();
 
   // ── Event document ──────────────────────────────────────────────────────────
   const eventConfig: EventConfig = {
@@ -132,16 +151,15 @@ export async function seedDemoEvent(): Promise<EventConfig> {
     let dibbedByName: string | undefined;
     let scoutedBy: string | undefined;
 
-    if (row < 2) {
+    // Rows A–D fully scouted, row E: 6 scouted, 1 dibbed, 1 unclaimed
+    if (row < 4) {
       status = 'scouted';
       scoutedBy = SCOUTS[i % 6].uid;
-    } else if (row === 2) {
-      if (i % 8 < 4) { status = 'scouted'; scoutedBy = SCOUTS[i % 6].uid; }
-      else { status = 'dibbed'; dibbedBy = SCOUTS[i % 6].uid; dibbedByName = SCOUTS[i % 6].name; }
-    } else if (row === 3) {
-      const pos = i % 8;
-      if (pos < 2) { status = 'scouted'; scoutedBy = SCOUTS[pos].uid; }
-      else if (pos < 5) { status = 'dibbed'; dibbedBy = SCOUTS[pos % 6].uid; dibbedByName = SCOUTS[pos % 6].name; }
+    } else {
+      const col = i % 8;
+      if (col < 6) { status = 'scouted'; scoutedBy = SCOUTS[col % 6].uid; }
+      else if (col === 6) { status = 'dibbed'; dibbedBy = SCOUTS[2].uid; dibbedByName = SCOUTS[2].name; }
+      // col === 7 stays unclaimed
     }
 
     pitBatch.set(doc(db, 'events', EVENT_ID, 'pits', String(team)), {
@@ -164,8 +182,8 @@ export async function seedDemoEvent(): Promise<EventConfig> {
   for (const match of completedMatches) {
     const matchTime = NOW_UNIX - (COMPLETED_MATCHES - match.matchNumber + 1) * MATCH_INTERVAL;
 
-    // Skip Blue 3 scouting in match 11 — intentional gap for lead dashboard testing
-    const skipSlot = match.matchNumber === 11 ? 'blue2' : null;
+    // One missed slot in match 20 (red3) — realistic scout gap
+    const skipSlot = match.matchNumber === 20 ? 'red3' : null;
 
     const slots: { alliance: 'red' | 'blue'; position: 1 | 2 | 3; team: number; scout: typeof SCOUTS[0] }[] = [
       { alliance: 'red',  position: 1, team: match.red[0],  scout: SCOUTS[0] },
@@ -216,6 +234,51 @@ export async function seedDemoEvent(): Promise<EventConfig> {
     blue2: { uid: SCOUTS[4].uid, name: SCOUTS[4].name },
     blue3: { uid: SCOUTS[5].uid, name: SCOUTS[5].name },
   });
+
+  // ── TBA store — seed with demo schedule so the quick-fill picker aligns ──────
+  // Without this the picker either shows nothing or stale data from a different
+  // event, so scoutedSet keys never match and cells never turn green.
+  useTBAStore.getState().setTBAData(
+    {
+      key: EVENT_ID,
+      name: eventConfig.name,
+      short_name: 'Chezy Champs',
+      event_code: 'demo',
+      year: 2026,
+      start_date: '2026-09-12',
+      end_date: '2026-09-14',
+      location_name: 'Demo Arena',
+      city: 'San Jose',
+      state_prov: 'CA',
+      country: 'USA',
+    },
+    TEAMS.map((t) => ({
+      key: `frc${t}`,
+      team_number: t,
+      nickname: `Team ${t}`,
+      name: `FRC Team ${t}`,
+      city: null,
+      state_prov: null,
+    })),
+    schedule.map((m) => {
+      const matchTime = NOW_UNIX - (COMPLETED_MATCHES - m.matchNumber + 1) * MATCH_INTERVAL;
+      const played = m.matchNumber <= COMPLETED_MATCHES;
+      return {
+        key: `${EVENT_ID}_qm${m.matchNumber}`,
+        comp_level: 'qm' as const,
+        set_number: 1,
+        match_number: m.matchNumber,
+        alliances: {
+          red:  { team_keys: m.red.map((t)  => `frc${t}`), score: -1, dq_team_keys: [], surrogate_team_keys: [] },
+          blue: { team_keys: m.blue.map((t) => `frc${t}`), score: -1, dq_team_keys: [], surrogate_team_keys: [] },
+        },
+        time: matchTime,
+        predicted_time: matchTime,
+        actual_time: played ? matchTime : null,
+        post_result_time: played ? matchTime + 60 : null,
+      };
+    })
+  );
 
   return eventConfig;
 }
