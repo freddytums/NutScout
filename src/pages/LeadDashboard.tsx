@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, Users, Loader2 } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import { AlertCircle, AlertTriangle, CheckCircle2, Users, Loader2, CalendarOff, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useMatches } from '@/hooks/useMatches';
@@ -57,7 +58,13 @@ export function LeadDashboard() {
     <div className="p-4 flex flex-col gap-4 max-w-2xl mx-auto">
       <h2 className="text-base font-semibold">Scouting Lead Dashboard</h2>
 
-      {loading ? (
+      {!currentEvent && !loading ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+          <CalendarOff size={32} className="text-[hsl(var(--muted-foreground))]" />
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">No event selected.</p>
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">Go to Settings → Sync Event from TBA to get started.</p>
+        </div>
+      ) : loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="animate-spin text-[hsl(var(--accent))]" size={32} />
         </div>
@@ -148,6 +155,20 @@ export function LeadDashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Quick links */}
+          <div className="flex flex-col gap-1">
+            <NavLink
+              to="/users"
+              className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--primary))] hover:border-[hsl(var(--accent)/0.4)] transition-colors"
+            >
+              <div className="flex items-center gap-2 text-sm">
+                <Users size={15} className="text-[hsl(var(--accent))]" />
+                Manage Users & Roles
+              </div>
+              <ChevronRight size={14} className="text-[hsl(var(--muted-foreground))]" />
+            </NavLink>
+          </div>
         </>
       )}
     </div>

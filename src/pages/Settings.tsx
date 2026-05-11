@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { LogOut, RefreshCw, CheckCircle2, AlertCircle, Key, CalendarDays, Users, ShieldAlert } from 'lucide-react';
+import { LogOut, RefreshCw, CheckCircle2, AlertCircle, Key, CalendarDays, Users, ShieldAlert, FlaskConical } from 'lucide-react';
+import { useSandboxStore } from '@/store/sandboxStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,24 +11,27 @@ import { useTBASync } from '@/hooks/useTBASync';
 import { useAppConfig, saveTbaKey } from '@/hooks/useAppConfig';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { EventConfig, AppUser } from '@/types/scout';
+import type { AppUser } from '@/types/scout';
 import { Timestamp } from 'firebase/firestore';
+import { seedDemoEvent } from '@/lib/demoSeed';
 import { format } from 'date-fns';
 
 const DEMO_SCOUTS: Omit<AppUser, 'createdAt'>[] = [
-  { uid: 'demo-alex', email: 'alex@demo.com', displayName: 'Alex Chen', role: 'scout', isPrimaryScout: true, photoURL: 'https://robohash.org/alexchen?set=set3&size=80x80' },
-  { uid: 'demo-jordan', email: 'jordan@demo.com', displayName: 'Jordan Martinez', role: 'scout', isPrimaryScout: true, photoURL: 'https://robohash.org/jordanmartinez?set=set3&size=80x80' },
-  { uid: 'demo-sam', email: 'sam@demo.com', displayName: 'Sam Rivera', role: 'scout', isPrimaryScout: true, photoURL: 'https://robohash.org/samrivera?set=set3&size=80x80' },
-  { uid: 'demo-taylor', email: 'taylor@demo.com', displayName: 'Taylor Kim', role: 'scout', isPrimaryScout: true, photoURL: 'https://robohash.org/taylorkim?set=set3&size=80x80' },
-  { uid: 'demo-morgan', email: 'morgan@demo.com', displayName: 'Morgan Thompson', role: 'scout', isPrimaryScout: true, photoURL: 'https://robohash.org/morganthompson?set=set3&size=80x80' },
-  { uid: 'demo-casey', email: 'casey@demo.com', displayName: 'Casey Williams', role: 'scout', isPrimaryScout: true, photoURL: 'https://robohash.org/caseywilliams?set=set3&size=80x80' },
-  { uid: 'demo-riley', email: 'riley@demo.com', displayName: 'Riley Johnson', role: 'scout', isPrimaryScout: false, photoURL: 'https://robohash.org/rileyjohnson?set=set3&size=80x80' },
-  { uid: 'demo-drew', email: 'drew@demo.com', displayName: 'Drew Patel', role: 'scout', isPrimaryScout: false, photoURL: 'https://robohash.org/drewpatel?set=set3&size=80x80' },
+  { uid: 'demo-brando',  email: 'brando@demo.com',  displayName: 'Brando',   role: 'scout', isPrimaryScout: true,  teamNumber: 1678, teamKey: 'frc1678', teamName: 'Citrus Circuits',   photoURL: 'https://robohash.org/brando?set=set3&size=80x80' },
+  { uid: 'demo-kyle',    email: 'kyle@demo.com',    displayName: 'Kyle',     role: 'scout', isPrimaryScout: true,  teamNumber: 1678, teamKey: 'frc1678', teamName: 'Citrus Circuits',   photoURL: 'https://robohash.org/kyle?set=set3&size=80x80' },
+  { uid: 'demo-victor',  email: 'victor@demo.com',  displayName: 'Victor',   role: 'scout', isPrimaryScout: true,  teamNumber: 1678, teamKey: 'frc1678', teamName: 'Citrus Circuits',   photoURL: 'https://robohash.org/victor?set=set3&size=80x80' },
+  { uid: 'demo-jack',    email: 'jack@demo.com',    displayName: 'Jack',     role: 'scout', isPrimaryScout: true,  teamNumber: 254,  teamKey: 'frc254',  teamName: 'The Cheesy Poofs', photoURL: 'https://robohash.org/jack?set=set3&size=80x80' },
+  { uid: 'demo-henry',   email: 'henry@demo.com',   displayName: 'Henry',    role: 'scout', isPrimaryScout: true,  teamNumber: 254,  teamKey: 'frc254',  teamName: 'The Cheesy Poofs', photoURL: 'https://robohash.org/henry?set=set3&size=80x80' },
+  { uid: 'demo-walshie', email: 'walshie@demo.com', displayName: 'Walshie',  role: 'scout', isPrimaryScout: true,  teamNumber: 254,  teamKey: 'frc254',  teamName: 'The Cheesy Poofs', photoURL: 'https://robohash.org/walshie?set=set3&size=80x80' },
+  { uid: 'demo-zach',    email: 'zach@demo.com',    displayName: 'Zach',     role: 'scout', isPrimaryScout: false, teamNumber: 1678, teamKey: 'frc1678', teamName: 'Citrus Circuits',   photoURL: 'https://robohash.org/zach?set=set3&size=80x80' },
+  { uid: 'demo-goldman', email: 'goldman@demo.com', displayName: 'Goldman',  role: 'scout', isPrimaryScout: false, teamNumber: 254,  teamKey: 'frc254',  teamName: 'The Cheesy Poofs', photoURL: 'https://robohash.org/goldman?set=set3&size=80x80' },
+  { uid: 'demo-bashir',  email: 'bashir@demo.com',  displayName: 'Bashir',   role: 'scout', isPrimaryScout: false, teamNumber: 1678, teamKey: 'frc1678', teamName: 'Citrus Circuits',   photoURL: 'https://robohash.org/bashir?set=set3&size=80x80' },
 ];
 
 export function Settings() {
-  const { user } = useAuth();
-  const { currentEvent } = useEventStore();
+  const { user, realRole } = useAuth();
+  const { sandboxRole, sandboxUser, clear: clearSandbox } = useSandboxStore();
+  const { currentEvent, setCurrentEventId, setCurrentEvent } = useEventStore();
   const { event: tbaEvent, teams, matches, lastSynced } = useTBAStore();
   const { config: appConfig } = useAppConfig();
   const { sync, status, error } = useTBASync();
@@ -38,10 +42,14 @@ export function Settings() {
   const [tbaKeySaving, setTbaKeySaving] = useState(false);
   const [tbaKeySaved, setTbaKeySaved] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [demoDone, setDemoDone] = useState(false);
   const [scoutSeedLoading, setScoutSeedLoading] = useState(false);
   const [scoutSeedDone, setScoutSeedDone] = useState(false);
+  const [scoutSeedError, setScoutSeedError] = useState<string | null>(null);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'lead';
+  // Always use real role for Settings — sandbox role should not hide admin controls
+  const isAdmin = realRole === 'admin' || realRole === 'lead';
 
   async function handleSaveTbaKey() {
     if (!tbaKeyInput.trim()) return;
@@ -58,6 +66,8 @@ export function Settings() {
 
   async function handleSeedDemoScouts() {
     setScoutSeedLoading(true);
+    setScoutSeedError(null);
+    setScoutSeedDone(false);
     try {
       await Promise.all(
         DEMO_SCOUTS.map((scout) =>
@@ -65,6 +75,9 @@ export function Settings() {
         )
       );
       setScoutSeedDone(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setScoutSeedError(`Failed: ${msg}. Make sure your role is lead/admin and rules are published.`);
     } finally {
       setScoutSeedLoading(false);
     }
@@ -77,39 +90,16 @@ export function Settings() {
 
   async function handleCreateDemoEvent() {
     setDemoLoading(true);
+    setDemoError(null);
+    setDemoDone(false);
     try {
-      const demoEvent: EventConfig = {
-        id: 'demo-2026',
-        name: '2026 Demo Event',
-        year: 2026,
-        eventKey: 'demo-2026',
-        pitLayout: {
-          rows: 5,
-          cols: 8,
-          rowLabels: ['A', 'B', 'C', 'D', 'E'],
-          colLabels: ['1', '2', '3', '4', '5', '6', '7', '8'],
-        },
-        teamAssignments: {
-          '0-0': 254, '0-1': 1678, '0-2': 4414, '0-3': 3310, '0-4': 1323, '0-5': 2910, '0-6': 1619, '0-7': 5026,
-          '1-0': 2056, '1-1': 148, '1-2': 3538, '1-3': 1114, '1-4': 2767, '1-5': 1241, '1-6': 4910, '1-7': 3015,
-          '2-0': 604, '2-1': 6328, '2-2': 3360, '2-3': 2522, '2-4': 1086, '2-5': 3476, '2-6': 5987, '2-7': 2658,
-          '3-0': 2451, '3-1': 1690, '3-2': 7461, '3-3': 2220, '3-4': 4613, '3-5': 3255, '3-6': 1720, '3-7': 6672,
-          '4-0': 2468, '4-1': 5190, '4-2': 3314, '4-3': 1477, '4-4': 2169, '4-5': 498, '4-6': 8033, '4-7': 5024,
-        },
-        activeGameYear: 2026,
-      };
-
-      await setDoc(doc(db, 'events', 'demo-2026'), demoEvent);
-      const teams = Object.values(demoEvent.teamAssignments!);
-      await Promise.all(
-        teams.map((team, i) =>
-          setDoc(
-            doc(db, 'events', 'demo-2026', 'pits', String(team)),
-            { teamNumber: team, row: Math.floor(i / 8), col: i % 8, status: 'unclaimed', createdAt: Timestamp.now() },
-            { merge: true }
-          )
-        )
-      );
+      const eventConfig = await seedDemoEvent();
+      setCurrentEventId(eventConfig.id);
+      setCurrentEvent(eventConfig);
+      setDemoDone(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setDemoError(`Failed: ${msg}. Make sure your role is lead/admin and Firestore rules are published.`);
     } finally {
       setDemoLoading(false);
     }
@@ -120,6 +110,22 @@ export function Settings() {
   return (
     <div className="p-4 flex flex-col gap-4 max-w-lg mx-auto">
       <h2 className="text-base font-semibold">Settings</h2>
+
+      {/* Sandbox mode warning */}
+      {(sandboxRole || sandboxUser) && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/08 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-sm text-amber-300">
+            <FlaskConical size={14} />
+            {sandboxUser
+              ? <>Viewing as <strong>{sandboxUser.displayName}</strong> ({sandboxUser.role}). Settings show your real role.</>
+              : <>Sandbox active — viewing as <strong>{sandboxRole}</strong>. Settings show your real role.</>
+            }
+          </div>
+          <button type="button" onClick={clearSandbox} className="text-xs text-amber-400 hover:text-amber-200 cursor-pointer shrink-0 underline">
+            Exit
+          </button>
+        </div>
+      )}
 
       {/* Account */}
       {user && (
@@ -261,16 +267,24 @@ export function Settings() {
             </div>
           )}
 
-          <div className="border-t border-[hsl(var(--border)/0.5)] pt-3">
-            <Button variant="ghost" size="sm" onClick={handleCreateDemoEvent} loading={demoLoading} className="text-xs text-[hsl(var(--muted-foreground))]">
-              Load demo event instead
+          <div className="border-t border-[hsl(var(--border)/0.5)] pt-3 flex flex-col gap-2">
+            <Button variant="secondary" size="sm" onClick={handleCreateDemoEvent} loading={demoLoading} className="gap-2 w-full">
+              {demoLoading ? 'Seeding mid-event data…' : 'Load Demo Event (mid-event state)'}
             </Button>
+            {demoDone && (
+              <p className="text-xs text-[hsl(var(--accent))]">
+                Demo loaded — 40 teams, 18 completed matches, mixed pit status. Event is now active.
+              </p>
+            )}
+            {demoError && (
+              <p className="text-xs text-[hsl(var(--destructive))]">{demoError}</p>
+            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Demo scout seeder */}
-      {(user?.role === 'lead' || user?.role === 'admin') && (
+      {isAdmin && (
         <Card>
           <CardHeader className="flex-row items-center gap-2 pb-2">
             <Users size={15} className="text-[hsl(var(--accent))]" />
@@ -278,12 +292,13 @@ export function Settings() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <p className="text-xs text-[hsl(var(--muted-foreground))]">
-              Seed 8 fake scout accounts for testing assignments and scheduling. Safe to run multiple times.
+              Seed 9 demo scout accounts for testing assignments and scheduling. Safe to run multiple times.
             </p>
             <Button variant="secondary" size="sm" onClick={handleSeedDemoScouts} loading={scoutSeedLoading} className="gap-2">
               <Users size={14} /> Seed Demo Scouts
             </Button>
-            {scoutSeedDone && <p className="text-xs text-[hsl(var(--accent))]">8 demo scouts added to Firestore</p>}
+            {scoutSeedDone && <p className="text-xs text-[hsl(var(--accent))]">9 demo scouts added — visible in User Management.</p>}
+            {scoutSeedError && <p className="text-xs text-[hsl(var(--destructive))]">{scoutSeedError}</p>}
           </CardContent>
         </Card>
       )}

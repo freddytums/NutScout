@@ -51,6 +51,9 @@ service cloud.firestore {
                     && request.auth.uid == uid
                     && request.resource.data.role == 'scout';
 
+      // Leads can create user documents for any uid (demo seeding, manual account setup)
+      allow create: if isLead();
+
       // Self-update: can change display name, photo, teamNumber, teamKey, teamName
       // but not role or isPrimaryScout (those require lead+)
       allow update: if isSignedIn()

@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, ChevronRight, Search, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { FormRenderer, initFormValues } from '@/components/scouting/FormRenderer';
 import { useMatches } from '@/hooks/useMatches';
 import { useEventStore } from '@/store/eventStore';
@@ -275,12 +274,12 @@ export function MatchScouting() {
               )}
             </span>
           </div>
-          <Badge
-            variant={myStation.startsWith('red') ? 'destructive' : 'secondary'}
-            className="ml-auto shrink-0 text-[10px]"
-          >
+          <span className={cn(
+            'text-[10px] font-semibold px-2 py-0.5 rounded-full ml-auto shrink-0',
+            myStation.startsWith('red') ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
+          )}>
             {myStation.replace('red', 'R').replace('blue', 'B')}
-          </Badge>
+          </span>
         </div>
       )}
 
@@ -317,9 +316,12 @@ export function MatchScouting() {
                 </div>
                 {meta.teamNumber && meta.matchNumber && (
                   <div className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
-                    <Badge variant={meta.alliance === 'red' ? 'destructive' : 'secondary'} className="font-data">
+                    <span className={cn(
+                      'text-xs font-semibold px-2 py-0.5 rounded-full font-data',
+                      meta.alliance === 'red' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
+                    )}>
                       {meta.alliance === 'red' ? 'Red' : 'Blue'} {meta.alliancePosition}
-                    </Badge>
+                    </span>
                     <span>Team {meta.teamNumber} · Q{meta.matchNumber}</span>
                   </div>
                 )}

@@ -12,7 +12,7 @@ export function Login() {
     setError(null);
     try {
       await signInWithGoogle();
-    } catch (e) {
+    } catch {
       setError('Sign-in failed. Check your connection and try again.');
     } finally {
       setLoading(false);
@@ -23,18 +23,11 @@ export function Login() {
     <div className="min-h-dvh flex flex-col items-center justify-center p-6 bg-[hsl(var(--background))]">
       <div className="w-full max-w-sm flex flex-col items-center gap-8">
         {/* Logo / Brand */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-16 h-16 rounded-2xl bg-[hsl(var(--accent)/0.15)] border border-[hsl(var(--accent)/0.3)] flex items-center justify-center glow-green">
-            <svg viewBox="0 0 32 32" fill="none" className="w-10 h-10" aria-hidden>
-              <circle cx="16" cy="16" r="14" stroke="hsl(142,71%,45%)" strokeWidth="2" />
-              <path d="M10 16a6 6 0 1 1 12 0 6 6 0 0 1-12 0z" fill="hsl(142,71%,45%)" opacity=".3" />
-              <circle cx="16" cy="16" r="3" fill="hsl(142,71%,45%)" />
-              <path d="M16 6v4M16 22v4M6 16h4M22 16h4" stroke="hsl(142,71%,45%)" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
+        <div className="flex flex-col items-center gap-4">
+          <img src="/NutScout/NUTRONs.png" alt="Nutrons 125" className="w-32 h-32 object-contain drop-shadow-lg" draggable={false} />
           <div className="text-center">
             <h1 className="text-3xl font-black tracking-wider text-[hsl(var(--foreground))]">NUTSCOUT</h1>
-            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">FRC Scouting Platform</p>
+            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Nutrons 125 · FRC Scouting</p>
           </div>
         </div>
 

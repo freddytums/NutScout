@@ -11,7 +11,10 @@ export function usePits() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentEventId) return;
+    if (!currentEventId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const unsub = subscribeToPits(currentEventId, (data) => {
       setPits(data);

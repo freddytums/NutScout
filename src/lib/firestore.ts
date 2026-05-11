@@ -7,7 +7,6 @@ import {
   deleteDoc,
   onSnapshot,
   query,
-  where,
   orderBy,
   Timestamp,
   serverTimestamp,
@@ -122,19 +121,18 @@ export async function flagMatch(eventId: string, matchId: string, flags: MatchEn
 // ─── Data Quality Queries ────────────────────────────────────────────────────
 
 export function subscribeToAllMatches(eventId: string, cb: (matches: MatchEntry[]) => void) {
-  return subscribeToMatches(
-    eventId,
-    [orderBy('matchNumber'), orderBy('teamNumber')],
-    cb
-  );
+  // Single-field orderBy avoids needing a composite Firestore index.
+  // Secondary sort by teamNumber is done client-side in the callback.
+  return subscribeToMatches(eventId, [orderBy('matchNumber')], (raw) => {
+    cb([...raw].sort((a, b) => a.matchNumber - b.matchNumber || a.teamNumber - b.teamNumber));
+  });
 }
 
 export function subscribeToMatchesForTeam(eventId: string, teamNumber: number, cb: (matches: MatchEntry[]) => void) {
-  return subscribeToMatches(
-    eventId,
-    [where('teamNumber', '==', teamNumber), orderBy('matchNumber')],
-    cb
-  );
+  // Filter client-side to avoid a composite index requirement.
+  return subscribeToMatches(eventId, [orderBy('matchNumber')], (raw) => {
+    cb(raw.filter((m) => m.teamNumber === teamNumber));
+  });
 }
 
 // ─── Station Assignments ─────────────────────────────────────────────────────

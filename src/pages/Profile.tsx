@@ -1,8 +1,7 @@
 import { useState, useRef } from 'react';
-import { Camera, Save, Loader2, Search } from 'lucide-react';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Camera, Save, Search } from 'lucide-react';
 import { updateProfile } from 'firebase/auth';
-import { storage, auth } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { updateUserProfile } from '@/lib/firestore';
 import { getTeam } from '@/lib/tba';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,6 +9,48 @@ import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+
+/** Resize + center-crop to maxPx × maxPx, return as base64 JPEG data URL.
+ *  No Firebase Storage needed — stored directly in Firestore (~20KB). */
+function compressToDataURL(file: File, maxPx = 256, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const size = Math.min(img.naturalWidth || img.width, img.naturalHeight || img.height, maxPx);
+        canvas.width = size;
+        canvas.height = size;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Canvas not supported')); return; }
+
+        // White background so transparency renders correctly as JPEG
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+
+        const sw = img.naturalWidth || img.width;
+        const sh = img.naturalHeight || img.height;
+        ctx.drawImage(img, (sw - size) / 2, (sh - size) / 2, size, size, 0, 0, size, size);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        if (dataUrl === 'data:,') { reject(new Error('Canvas produced empty output')); return; }
+        resolve(dataUrl);
+      } catch (e) {
+        reject(e);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image failed to load')); };
+    // Must set crossOrigin before src for object URLs (even local ones on some browsers)
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+  });
+}
 
 export function Profile() {
   const { user } = useAuth();
@@ -21,17 +62,19 @@ export function Profile() {
   const [lookingUpTeam, setLookingUpTeam] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'compressing' | 'saving' | 'done'>('idle');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
 
+  const isSaving = saveStatus !== 'idle' && saveStatus !== 'done';
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) { setError('Photo must be under 5MB'); return; }
+    if (f.size > 20 * 1024 * 1024) { setError('Photo must be under 20MB'); return; }
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setError(null);
@@ -55,16 +98,18 @@ export function Profile() {
   async function handleSave() {
     if (!user) return;
     if (!name.trim()) { setError('Name cannot be empty'); return; }
-    setSaving(true);
     setError(null);
+    setSaved(false);
     try {
       let photoURL = user.photoURL;
+
       if (file) {
-        const storageRef = ref(storage, `photos/${user.uid}/avatar`);
-        await uploadBytes(storageRef, file);
-        photoURL = await getDownloadURL(storageRef);
+        // Compress + convert to base64 — stored directly in Firestore, no Storage needed
+        setSaveStatus('compressing');
+        photoURL = await compressToDataURL(file, 256, 0.85);
       }
 
+      setSaveStatus('saving');
       const updates: Parameters<typeof updateUserProfile>[1] = {
         displayName: name.trim(),
         photoURL: photoURL ?? undefined,
@@ -90,16 +135,25 @@ export function Profile() {
         photoURL: photoURL ?? undefined,
         ...(teamNumber ? { teamNumber: parseInt(teamNumber), teamKey, teamName } : {}),
       });
+
+      setSaveStatus('done');
       setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch {
-      setError('Save failed. Try again.');
-    } finally {
-      setSaving(false);
+      setFile(null);
+      setTimeout(() => { setSaved(false); setSaveStatus('idle'); }, 3000);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setError(`Save failed: ${msg}`);
+      setSaveStatus('idle');
     }
   }
 
   const avatarSrc = preview ?? user.photoURL;
+
+  const saveLabel =
+    saveStatus === 'compressing' ? 'Compressing…' :
+    saveStatus === 'saving'      ? 'Saving…' :
+    saved                        ? 'Saved!' :
+    'Save Changes';
 
   return (
     <div className="p-4 flex flex-col gap-4 max-w-lg mx-auto">
@@ -119,12 +173,20 @@ export function Profile() {
                 </div>
               )}
               <button type="button" onClick={() => inputRef.current?.click()}
-                className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[hsl(var(--accent))] flex items-center justify-center cursor-pointer shadow-lg" aria-label="Change photo">
+                className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[hsl(var(--accent))] flex items-center justify-center cursor-pointer shadow-lg"
+                aria-label="Change photo">
                 <Camera size={14} className="text-black" />
               </button>
             </div>
-            <input ref={inputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} aria-label="Upload profile photo" />
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Tap the camera to upload a photo (max 5MB)</p>
+            <input ref={inputRef} type="file" accept="image/*" className="sr-only"
+              onChange={handleFileChange} aria-label="Upload profile photo" />
+
+            {file && saveStatus === 'idle' && (
+              <p className="text-xs text-[hsl(var(--accent))]">Photo selected — tap Save to upload</p>
+            )}
+            {!file && saveStatus === 'idle' && (
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">Photos are compressed automatically before upload</p>
+            )}
           </div>
 
           {/* Name */}
@@ -143,7 +205,8 @@ export function Profile() {
                 onChange={(e) => { setTeamNumber(e.target.value); setTeamName(''); setTeamKey(''); }}
                 className="flex-1 h-11 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 text-lg font-data focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--primary))]"
                 placeholder="e.g. 254" />
-              <Button variant="secondary" size="icon" onClick={lookupTeam} loading={lookingUpTeam} disabled={!teamNumber} aria-label="Look up team on TBA">
+              <Button variant="secondary" size="icon" onClick={lookupTeam} loading={lookingUpTeam}
+                disabled={!teamNumber} aria-label="Look up team on TBA">
                 <Search size={16} />
               </Button>
             </div>
@@ -160,9 +223,9 @@ export function Profile() {
 
           {error && <p className="text-sm text-[hsl(var(--destructive))]" role="alert">{error}</p>}
 
-          <Button onClick={handleSave} loading={saving} className="gap-2">
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {saved ? 'Saved!' : 'Save Changes'}
+          <Button onClick={handleSave} loading={isSaving} className="gap-2">
+            <Save size={16} />
+            {saveLabel}
           </Button>
         </CardContent>
       </Card>

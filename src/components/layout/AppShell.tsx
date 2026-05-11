@@ -3,6 +3,7 @@ import { Map, ClipboardList, LayoutDashboard, Wrench, Settings, CalendarCheck } 
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
+import { RoleSandbox } from '@/components/RoleSandbox';
 
 const navItems = [
   { to: '/match', icon: ClipboardList, label: 'Match' },
@@ -27,10 +28,15 @@ export function AppShell() {
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[hsl(var(--border))] bg-[hsl(var(--primary)/0.95)] backdrop-blur-md safe-top">
         <div className="flex items-center justify-between px-4 h-14">
-          <span className="font-[Orbitron] font-bold text-sm tracking-widest text-[hsl(var(--foreground))]">
-            NUTSCOUT
-          </span>
+          <div className="flex items-center gap-2.5">
+            <img src="/NutScout/NUTRONs.png" alt="Nutrons 125" className="h-8 w-8 object-contain" draggable={false} />
+            <span className="font-[Orbitron] font-bold text-sm tracking-widest text-[hsl(var(--foreground))]">
+              NUTSCOUT
+            </span>
+          </div>
           {user && (
+            <div className="flex items-center gap-2">
+              <RoleSandbox />
             <button
               type="button"
               onClick={() => navigate('/profile')}
@@ -50,6 +56,7 @@ export function AppShell() {
                 </span>
               )}
             </button>
+            </div>
           )}
         </div>
       </header>

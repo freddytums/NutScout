@@ -294,9 +294,12 @@ function MySchedule({ uid, myStation }: { uid: string; myStation: Station | null
                 <span className="font-data text-base font-bold">{teamNum ?? '—'}</span>
                 {time && <span className="text-xs text-[hsl(var(--muted-foreground))] ml-2">{format(time * 1000, 'h:mm a')}</span>}
               </div>
-              <Badge variant={stationAlliance(station) === 'red' ? 'destructive' : 'secondary'} className="text-[10px] shrink-0">
+              <span className={cn(
+                'text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0',
+                stationAlliance(station) === 'red' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
+              )}>
                 {station.replace('red', 'R').replace('blue', 'B')}
-              </Badge>
+              </span>
               {scouted ? <CheckCircle2 size={14} className="text-[hsl(var(--accent))] shrink-0" /> : <ChevronRight size={14} className="text-[hsl(var(--muted-foreground))] shrink-0" />}
             </button>
           );
@@ -401,7 +404,7 @@ export function Assignments() {
   return (
     <div className="flex flex-col max-w-2xl mx-auto">
       {/* Tab bar */}
-      <div className="flex border-b border-[hsl(var(--border))] bg-[hsl(var(--primary)/0.5)] sticky top-14 z-30">
+      <div className="flex border-b border-[hsl(var(--border))] bg-[hsl(var(--primary))] backdrop-blur-md sticky top-14 z-30">
         {visibleTabs.map((t) => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}
             className={cn('flex-1 py-3 text-xs font-medium transition-colors cursor-pointer',
@@ -491,30 +494,32 @@ export function Assignments() {
         {/* ── Full Schedule tab (lead) ── */}
         {tab === 'schedule' && isLead && (
           <>
-            {/* Header legend */}
-            <div className="grid grid-cols-6 gap-0 border border-[hsl(var(--border))] rounded-t-lg overflow-hidden">
-              {STATIONS.map((s) => (
-                <div key={s} className={cn('py-1 text-center text-[10px] font-bold', stationAlliance(s) === 'red' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400')}>
-                  {s.replace('red', 'R').replace('blue', 'B')}
-                </div>
-              ))}
-            </div>
-
             {qualMatches.length === 0 ? (
               <p className="text-sm text-[hsl(var(--muted-foreground))] text-center py-6">Sync a TBA event first to see the schedule.</p>
             ) : (
-              <div className="border border-[hsl(var(--border))] border-t-0 rounded-b-lg overflow-hidden overflow-x-auto">
-                {qualMatches.map((match) => (
-                  <ScheduleRow
-                    key={match.key}
-                    match={match}
-                    assignments={schedule}
-                    isSlotScouted={isSlotScouted}
-                    onReassign={(station) => setPicking({ station, matchKey: match.key })}
-                    onPing={handlePing}
-                    isLead={isLead}
-                  />
-                ))}
+              /* Self-contained scroll container — sticky header lives inside, no viewport collision */
+              <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+                <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: 'calc(100dvh - 11rem)' }}>
+                  {/* Sticky column header within this scroll container */}
+                  <div className="grid grid-cols-6 sticky top-0 z-10 border-b border-[hsl(var(--border))]">
+                    {STATIONS.map((s) => (
+                      <div key={s} className={cn('py-1.5 text-center text-[10px] font-bold', stationAlliance(s) === 'red' ? 'bg-red-500/25 text-red-400' : 'bg-blue-500/25 text-blue-400')}>
+                        {s.replace('red', 'R').replace('blue', 'B')}
+                      </div>
+                    ))}
+                  </div>
+                  {qualMatches.map((match) => (
+                    <ScheduleRow
+                      key={match.key}
+                      match={match}
+                      assignments={schedule}
+                      isSlotScouted={isSlotScouted}
+                      onReassign={(station) => setPicking({ station, matchKey: match.key })}
+                      onPing={handlePing}
+                      isLead={isLead}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 

@@ -12,6 +12,7 @@ const PitMap = lazy(() => import('@/pages/PitMap').then((m) => ({ default: m.Pit
 const Assignments = lazy(() => import('@/pages/Assignments').then((m) => ({ default: m.Assignments })));
 const Leaderboard = lazy(() => import('@/pages/Leaderboard').then((m) => ({ default: m.Leaderboard })));
 const Profile = lazy(() => import('@/pages/Profile').then((m) => ({ default: m.Profile })));
+const UserManagement = lazy(() => import('@/pages/UserManagement').then((m) => ({ default: m.UserManagement })));
 const LeadDashboard = lazy(() => import('@/pages/LeadDashboard').then((m) => ({ default: m.LeadDashboard })));
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })));
 
@@ -30,10 +31,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex items-center justify-center min-h-dvh">
         <div className="flex flex-col items-center gap-3">
-          <svg viewBox="0 0 32 32" fill="none" className="w-10 h-10 animate-pulse" aria-hidden>
-            <circle cx="16" cy="16" r="14" stroke="hsl(142,71%,45%)" strokeWidth="2" />
-            <circle cx="16" cy="16" r="3" fill="hsl(142,71%,45%)" />
-          </svg>
+          <img src="/NutScout/NUTRONs.png" alt="Nutrons 125" className="w-16 h-16 object-contain animate-pulse" />
           <span className="text-xs text-[hsl(var(--muted-foreground))] font-[Orbitron] tracking-widest">
             NUTSCOUT
           </span>
@@ -63,6 +61,7 @@ function App() {
               <Route path="assignments" element={<Assignments />} />
               <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="users" element={<UserManagement />} />
               <Route path="dashboard" element={<LeadDashboard />} />
               <Route path="settings" element={<Settings />} />
             </Route>
