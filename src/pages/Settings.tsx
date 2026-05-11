@@ -134,7 +134,7 @@ export function Settings() {
           <CardContent className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               {user.photoURL ? (
-                <img src={user.photoURL} alt="" className="w-10 h-10 rounded-full shrink-0" />
+                <img src={user.photoURL} alt="" className="w-10 h-10 rounded-full shrink-0 object-fill" />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-[hsl(var(--accent)/0.2)] flex items-center justify-center text-[hsl(var(--accent))] font-semibold shrink-0">
                   {user.displayName[0]}

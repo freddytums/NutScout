@@ -44,7 +44,7 @@ export function AppShell() {
               aria-label="My profile"
             >
               {user.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" />
+                <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full object-fill" />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-[hsl(var(--accent)/0.2)] flex items-center justify-center text-xs font-semibold text-[hsl(var(--accent))]">
                   {user.displayName[0]}

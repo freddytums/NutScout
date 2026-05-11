@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\github\\\\NutScout\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(git config *)",
+      "PowerShell(cd C:\\\\github\\\\NutScout; npx create-vite@latest . --template react-ts -- --skip-existing 2>&1; echo \"Exit: $LASTEXITCODE\")",
+      "PowerShell(New-Item *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(Copy-Item *)",
+      "PowerShell(Set-Content *)"
+    ]
+  }
+}

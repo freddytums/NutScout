@@ -20,20 +20,17 @@ function compressToDataURL(file: File, maxPx = 256, quality = 0.85): Promise<str
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        const size = Math.min(img.naturalWidth || img.width, img.naturalHeight || img.height, maxPx);
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = maxPx;
+        canvas.height = maxPx;
 
         const ctx = canvas.getContext('2d');
         if (!ctx) { reject(new Error('Canvas not supported')); return; }
 
-        // White background so transparency renders correctly as JPEG
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, size, size);
+        ctx.fillRect(0, 0, maxPx, maxPx);
 
-        const sw = img.naturalWidth || img.width;
-        const sh = img.naturalHeight || img.height;
-        ctx.drawImage(img, (sw - size) / 2, (sh - size) / 2, size, size, 0, 0, size, size);
+        // Stretch the entire image to fill — no cropping
+        ctx.drawImage(img, 0, 0, maxPx, maxPx);
 
         const dataUrl = canvas.toDataURL('image/jpeg', quality);
         if (dataUrl === 'data:,') { reject(new Error('Canvas produced empty output')); return; }
@@ -46,9 +43,7 @@ function compressToDataURL(file: File, maxPx = 256, quality = 0.85): Promise<str
     };
 
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image failed to load')); };
-    // Must set crossOrigin before src for object URLs (even local ones on some browsers)
-    img.crossOrigin = 'anonymous';
-    img.src = url;
+    img.src = url; // No crossOrigin — blob URLs are same-origin and don't support CORS
   });
 }
 
@@ -122,11 +117,10 @@ export function Profile() {
 
       await updateUserProfile(user.uid, updates);
 
+      // Only sync displayName to Firebase Auth — data URLs are too long for Auth's photoURL field.
+      // The app reads photoURL exclusively from Firestore, so Auth doesn't need it.
       if (auth.currentUser) {
-        await updateProfile(auth.currentUser, {
-          displayName: name.trim(),
-          photoURL: photoURL ?? null,
-        });
+        await updateProfile(auth.currentUser, { displayName: name.trim() });
       }
 
       setUser({
@@ -139,6 +133,7 @@ export function Profile() {
       setSaveStatus('done');
       setSaved(true);
       setFile(null);
+      setPreview(null); // show the saved compressed version, not the original blob
       setTimeout(() => { setSaved(false); setSaveStatus('idle'); }, 3000);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
@@ -166,7 +161,7 @@ export function Profile() {
           <div className="flex flex-col items-center gap-3">
             <div className="relative">
               {avatarSrc ? (
-                <img src={avatarSrc} alt="Profile" className="w-20 h-20 rounded-full object-cover" />
+                <img src={avatarSrc} alt="Profile" className="w-20 h-20 rounded-full object-fill" />
               ) : (
                 <div className="w-20 h-20 rounded-full bg-[hsl(var(--accent)/0.2)] flex items-center justify-center text-2xl font-bold text-[hsl(var(--accent))]">
                   {name[0] ?? '?'}

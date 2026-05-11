@@ -65,7 +65,7 @@ function ScoutPicker({ title, users, current, onPick, onClose }: {
           {filtered.map((user) => (
             <button key={user.uid} type="button" onClick={() => onPick({ uid: user.uid, name: user.displayName, photoURL: user.photoURL })}
               className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer', current?.uid === user.uid ? 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))]' : 'hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]')}>
-              {user.photoURL ? <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full shrink-0" /> : <div className="w-7 h-7 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-xs font-semibold shrink-0">{user.displayName[0]}</div>}
+              {user.photoURL ? <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full shrink-0 object-fill" /> : <div className="w-7 h-7 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-xs font-semibold shrink-0">{user.displayName[0]}</div>}
               <span className="flex-1 text-left truncate">{user.displayName}</span>
               {user.isPrimaryScout && <Badge variant="default" className="text-[10px] shrink-0">primary</Badge>}
             </button>
@@ -125,7 +125,7 @@ function ScheduleRow({ match, assignments, isSlotScouted, onReassign, onPing, is
                   className={cn('flex flex-col items-center gap-0.5 w-full rounded transition-colors', isLead && 'hover:bg-[hsl(var(--muted)/0.5)] cursor-pointer')}
                 >
                   {slot.photoURL ? (
-                    <img src={slot.photoURL} alt="" className="w-5 h-5 rounded-full" />
+                    <img src={slot.photoURL} alt="" className="w-5 h-5 rounded-full object-fill" />
                   ) : (
                     <div className="w-5 h-5 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-[10px] font-bold">
                       {slot.name[0]}
@@ -457,7 +457,7 @@ export function Assignments() {
                           !a && isLead && 'border-dashed opacity-70')}>
                         <span className={cn('text-xs font-semibold', alliance === 'red' ? 'text-red-400' : 'text-blue-400')}>{STATION_LABELS[station]}</span>
                         {a ? (<>
-                          {a.photoURL ? <img src={a.photoURL} alt="" className="w-8 h-8 rounded-full" /> : <div className="w-8 h-8 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-sm font-semibold">{a.name[0]}</div>}
+                          {a.photoURL ? <img src={a.photoURL} alt="" className="w-8 h-8 rounded-full object-fill" /> : <div className="w-8 h-8 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-sm font-semibold">{a.name[0]}</div>}
                           <span className="text-xs font-medium truncate max-w-full">{a.name.split(' ')[0]}</span>
                         </>) : (
                           <><div className="w-8 h-8 rounded-full border-2 border-dashed border-[hsl(var(--border))] flex items-center justify-center">{isLead && <UserPlus size={14} className="text-[hsl(var(--muted-foreground))]" />}</div><span className="text-xs text-[hsl(var(--muted-foreground))]">{isLead ? 'Assign' : '—'}</span></>
@@ -476,7 +476,7 @@ export function Assignments() {
                   <p className="text-xs text-[hsl(var(--muted-foreground))] mb-2">Primary scouts appear in the auto-scheduler. Toggle to add/remove.</p>
                   {users.map((u) => (
                     <div key={u.uid} className="flex items-center gap-3 py-1.5">
-                      {u.photoURL ? <img src={u.photoURL} alt="" className="w-7 h-7 rounded-full shrink-0" /> : <div className="w-7 h-7 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-xs shrink-0">{u.displayName[0]}</div>}
+                      {u.photoURL ? <img src={u.photoURL} alt="" className="w-7 h-7 rounded-full shrink-0 object-fill" /> : <div className="w-7 h-7 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-xs shrink-0">{u.displayName[0]}</div>}
                       <span className="flex-1 text-sm">{u.displayName}</span>
                       <button type="button" onClick={() => togglePrimary(u)}
                         className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer',

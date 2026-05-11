@@ -146,7 +146,7 @@ export function RoleSandbox() {
                       className={cn('w-full flex items-center gap-2.5 px-3 py-2 transition-colors cursor-pointer hover:bg-[hsl(var(--muted))]',
                         sandboxUser?.uid === u.uid && 'bg-[hsl(var(--muted)/0.6)]')}>
                       {u.photoURL ? (
-                        <img src={u.photoURL} alt="" className="w-6 h-6 rounded-full shrink-0" />
+                        <img src={u.photoURL} alt="" className="w-6 h-6 rounded-full shrink-0 object-fill" />
                       ) : (
                         <div className="w-6 h-6 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-[10px] font-semibold shrink-0">
                           {u.displayName[0]}

@@ -86,7 +86,7 @@ function UserRow({ user, onRoleChange, onPrimaryToggle, updating }: {
     )}>
       {/* Avatar */}
       {user.photoURL ? (
-        <img src={user.photoURL} alt="" className="w-9 h-9 rounded-full shrink-0 object-cover" />
+        <img src={user.photoURL} alt="" className="w-9 h-9 rounded-full shrink-0 object-fill" />
       ) : (
         <div className="w-9 h-9 rounded-full bg-[hsl(var(--muted))] flex items-center justify-center text-sm font-semibold shrink-0">
           {user.displayName[0]}
