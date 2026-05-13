@@ -3,12 +3,14 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, ChevronDown, AlertTriangle,
   CalendarOff, Loader2, Trash2, X, ArrowUpDown, ArrowUp, ArrowDown,
-  Download, Crosshair, RotateCcw,
+  Download, Crosshair, RotateCcw, Pencil, Check, ShieldAlert,
 } from 'lucide-react';
 import { useMatches } from '@/hooks/useMatches';
 import { usePits } from '@/hooks/usePits';
 import { useEventStore } from '@/store/eventStore';
+import { useTBAStore } from '@/store/tbaStore';
 import { useAuth } from '@/hooks/useAuth';
+import { findTeamSlot } from '@/lib/tba';
 import { getGameConfig } from '@/config/games';
 import { findOutliers } from '@/lib/dataQuality';
 import type { MatchEntry } from '@/types/scout';
@@ -68,18 +70,119 @@ function SortIcon({ col, sortCol, dir }: { col: string; sortCol: string; dir: 'a
   return dir === 'asc' ? <ArrowUp size={10} className="text-[hsl(var(--accent))]" /> : <ArrowDown size={10} className="text-[hsl(var(--accent))]" />;
 }
 
+// ── Inline field editor ───────────────────────────────────────────────────────
+
+function FieldEditor({
+  fields,
+  data,
+  notes,
+  onChange,
+  onNotesChange,
+}: {
+  fields: GameField[];
+  data: Record<string, unknown>;
+  notes?: string;
+  onChange: (data: Record<string, unknown>) => void;
+  onNotesChange?: (notes: string) => void;
+}) {
+  function set(id: string, value: unknown) {
+    onChange({ ...data, [id]: value });
+  }
+
+  const sections: Array<{ key: string; label: string }> = [
+    { key: 'auto',    label: 'Auto'    },
+    { key: 'teleop',  label: 'Teleop'  },
+    { key: 'endgame', label: 'Endgame' },
+    { key: 'general', label: 'General' },
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      {sections.map(({ key, label }) => {
+        const sectionFields = fields.filter((f) => f.section === key && f.type !== 'path');
+        if (sectionFields.length === 0) return null;
+        return (
+          <div key={key}>
+            <div className="text-[9px] font-semibold uppercase tracking-widest text-[hsl(var(--accent)/0.7)] mb-1.5">{label}</div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              {sectionFields.map((f) => (
+                <div key={f.id} className="flex flex-col gap-0.5">
+                  <label className="text-[10px] text-[hsl(var(--muted-foreground))] truncate leading-none" title={f.label}>
+                    {shortLabel(f)}
+                  </label>
+                  {(f.type === 'counter' || f.type === 'rating' || f.type === 'timer') && (
+                    <input
+                      type="number"
+                      value={(data[f.id] as number) ?? (f.defaultValue as number) ?? 0}
+                      min={f.min ?? 0}
+                      max={f.max}
+                      onChange={(e) => set(f.id, parseInt(e.target.value) || 0)}
+                      className="h-7 px-2 rounded border border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-xs font-data focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
+                    />
+                  )}
+                  {f.type === 'toggle' && (
+                    <label className="flex items-center gap-2 h-7 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={!!(data[f.id] ?? f.defaultValue)}
+                        onChange={(e) => set(f.id, e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-[hsl(var(--border))] accent-[hsl(var(--accent))] cursor-pointer"
+                      />
+                      <span className="text-xs text-[hsl(var(--foreground))]">{data[f.id] ? 'Yes' : 'No'}</span>
+                    </label>
+                  )}
+                  {f.type === 'select' && (
+                    <select
+                      value={(data[f.id] as string) ?? (f.defaultValue as string) ?? ''}
+                      onChange={(e) => set(f.id, e.target.value)}
+                      className="h-7 px-1.5 rounded border border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-xs text-[hsl(var(--foreground))] focus:outline-none cursor-pointer"
+                    >
+                      {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  )}
+                  {(f.type === 'text' || f.type === 'textarea') && (
+                    <input
+                      type="text"
+                      value={(data[f.id] as string) ?? ''}
+                      onChange={(e) => set(f.id, e.target.value)}
+                      className="h-7 px-2 rounded border border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-xs focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {onNotesChange !== undefined && (
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[9px] font-semibold uppercase tracking-widest text-[hsl(var(--accent)/0.7)]">Notes</label>
+          <textarea
+            value={notes ?? ''}
+            onChange={(e) => onNotesChange(e.target.value)}
+            rows={2}
+            placeholder="Optional note for this entry…"
+            className="px-2 py-1 rounded border border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-xs resize-none focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Raw entries view ──────────────────────────────────────────────────────────
 
 type RawSortCol = 'match' | 'team' | 'alliance' | 'scout' | 'auto' | 'teleop' | 'endgame' | 'total';
 
-function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
+function RawEntriesView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
   matches: MatchEntry[];
   allFields: GameField[];
-  outlierIds: Set<string>;
+  outlierTooltips: Map<string, string>;
   initialTeam?: string;
 }) {
   const { user } = useAuth();
-  const { deleteEntry } = useMatches();
+  const { deleteEntry, updateEntry } = useMatches();
   const isLead = user?.role === 'lead' || user?.role === 'admin';
 
   const [teamFilter, setTeamFilter]     = useState(initialTeam);
@@ -93,10 +196,16 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
   const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('asc');
   const [confirming, setConfirming]     = useState<string | null>(null);
   const [deleting, setDeleting]         = useState<string | null>(null);
+  const [editingId, setEditingId]       = useState<string | null>(null);
+  const [editData, setEditData]         = useState<Record<string, unknown>>({});
+  const [editNotes, setEditNotes]       = useState('');
+  const [saving, setSaving]             = useState(false);
 
   const scouts = useMemo(() => [...new Set(matches.map((m) => m.scoutedByName))].sort(), [matches]);
 
   const scored = useMemo(() => matches.map((m) => ({ ...m, pts: scorePts(m, allFields) })), [matches, allFields]);
+
+  const outlierIds = useMemo(() => new Set(outlierTooltips.keys()), [outlierTooltips]);
 
   const filtered = useMemo(() => {
     let rows = scored;
@@ -105,7 +214,7 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
     if (matchTo)       rows = rows.filter((r) => r.matchNumber <= parseInt(matchTo));
     if (allianceFilter !== 'all') rows = rows.filter((r) => r.alliance === allianceFilter);
     if (scoutFilter)   rows = rows.filter((r) => r.scoutedByName === scoutFilter);
-    if (flaggedOnly)   rows = rows.filter((r) => outlierIds.has(r.id ?? ''));
+    if (flaggedOnly)   rows = rows.filter((r) => outlierIds.has(r.id ?? '') || !!(r.flags?.needsRescount || r.flags?.outlier || r.flags?.duplicate));
 
     const mult = sortDir === 'asc' ? 1 : -1;
     const key: Record<RawSortCol, (r: typeof rows[0]) => number | string> = {
@@ -131,6 +240,24 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
     try { await deleteEntry(id); } finally { setDeleting(null); setConfirming(null); }
   }
 
+  function startEdit(row: typeof filtered[0]) {
+    setEditingId(row.id!);
+    setEditData({ ...row.data });
+    setEditNotes(row.notes ?? '');
+    setConfirming(null);
+  }
+
+  async function handleSave() {
+    if (!editingId) return;
+    setSaving(true);
+    try {
+      await updateEntry(editingId, editData, editNotes);
+      setEditingId(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function clearFilters() {
     setTeamFilter(''); setMatchFrom(''); setMatchTo(''); setAlliance('all'); setScoutFilter(''); setFlaggedOnly(false);
   }
@@ -141,6 +268,10 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
       {label} <SortIcon col={col} sortCol={sortCol} dir={sortDir} />
     </button>
   );
+
+  const colGrid = isLead
+    ? 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem_2.5rem_1.5rem]'
+    : 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem]';
 
   return (
     <div className="flex flex-col gap-3">
@@ -206,7 +337,7 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
               className={cn('flex items-center gap-2 text-sm cursor-pointer transition-colors',
                 flaggedOnly ? 'text-amber-400' : 'text-[hsl(var(--muted-foreground))]')}>
               <AlertTriangle size={13} />
-              Outliers only
+              Flagged only
             </button>
             {activeFilters > 0 && (
               <button type="button" onClick={clearFilters}
@@ -232,7 +363,7 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
           {/* Header */}
           <div className={cn(
             'grid text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] px-3 py-2 bg-[hsl(var(--muted)/0.5)] border-b border-[hsl(var(--border))]',
-            isLead ? 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem_1.5rem]' : 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem]'
+            colGrid
           )}>
             <TH col="match" label="Q#" />
             <TH col="team"  label="Team" />
@@ -242,53 +373,116 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
             <TH col="teleop" label="TP" />
             <TH col="endgame" label="EG" />
             <TH col="total" label="Total" />
-            {isLead && <span />}
+            {isLead && <><span /><span /></>}
           </div>
 
           {/* Rows */}
           <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: 'calc(100dvh - 20rem)' }}>
             {filtered.map((row) => {
-              const isOutlier = outlierIds.has(row.id ?? '');
+              const tooltip = outlierTooltips.get(row.id ?? '') ?? '';
+              const isFlagged = !!tooltip || !!(row.flags?.needsRescount || row.flags?.outlier || row.flags?.duplicate);
+              const isEditing = editingId === row.id;
               const isConfirming = confirming === row.id;
+
               return (
-                <div key={row.id}
-                  className={cn(
-                    'grid items-center px-3 py-2 border-b border-[hsl(var(--border)/0.3)] last:border-0 text-[10px] transition-opacity',
-                    isOutlier && 'bg-amber-500/04',
-                    deleting === row.id && 'opacity-40 pointer-events-none',
-                    isLead ? 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem_1.5rem]' : 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem]'
+                <div key={row.id} className={cn(isFlagged && 'bg-amber-500/10', deleting === row.id && 'opacity-40 pointer-events-none')}>
+                  {/* Summary row */}
+                  <div className={cn(
+                    'grid items-center px-3 py-2 border-b border-[hsl(var(--border)/0.3)] text-[10px] transition-colors',
+                    isEditing ? 'bg-[hsl(var(--muted)/0.5)] border-[hsl(var(--accent)/0.3)]' : '',
+                    colGrid
                   )}>
-                  <span className="font-data font-bold text-[hsl(var(--muted-foreground))]">Q{row.matchNumber}</span>
-                  <span className="font-data font-bold">{row.teamNumber}</span>
-                  <span className={cn('font-data font-semibold px-1 py-0.5 rounded text-center',
-                    row.alliance === 'red' ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/15 text-blue-400')}>
-                    {row.alliance === 'red' ? 'R' : 'B'}{row.alliancePosition}
-                  </span>
-                  <span className="truncate text-[hsl(var(--muted-foreground))]">{row.scoutedByName.split(' ')[0]}</span>
-                  <span className="font-data text-center">{fmt(row.pts.auto, 0)}</span>
-                  <span className="font-data text-center">{fmt(row.pts.teleop, 0)}</span>
-                  <span className="font-data text-center">{fmt(row.pts.endgame, 0)}</span>
-                  <span className={cn('font-data text-center font-bold', isOutlier ? 'text-amber-400' : 'text-[hsl(var(--foreground))]')}>
-                    {fmt(row.pts.total, 0)}
-                    {isOutlier && <AlertTriangle size={7} className="inline ml-0.5 mb-0.5" />}
-                  </span>
-                  {isLead && (
-                    isConfirming ? (
-                      <div className="flex gap-0.5">
-                        <button type="button" onClick={() => handleDelete(row.id!)} disabled={!!deleting}
-                          className="text-[8px] px-1.5 py-0.5 rounded bg-[hsl(var(--destructive))] text-white cursor-pointer font-semibold disabled:opacity-50">
-                          {deleting === row.id ? '…' : 'Del'}
+                    <span className={cn('font-data font-bold', isFlagged ? 'text-amber-400' : 'text-[hsl(var(--muted-foreground))]')}>Q{row.matchNumber}</span>
+                    <span className="font-data font-bold">{row.teamNumber}</span>
+                    <span className={cn('font-data font-semibold px-1 py-0.5 rounded text-center',
+                      row.alliance === 'red' ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/15 text-blue-400')}>
+                      {row.alliance === 'red' ? 'R' : 'B'}{row.alliancePosition}
+                    </span>
+                    <span className="truncate text-[hsl(var(--muted-foreground))]">{row.scoutedByName.split(' ')[0]}</span>
+                    <span className="font-data text-center">{fmt(row.pts.auto, 0)}</span>
+                    <span className="font-data text-center">{fmt(row.pts.teleop, 0)}</span>
+                    <span className="font-data text-center">{fmt(row.pts.endgame, 0)}</span>
+                    <span className={cn('font-data text-center font-bold', isFlagged ? 'text-amber-400' : 'text-[hsl(var(--foreground))]')}>
+                      {fmt(row.pts.total, 0)}
+                      {isFlagged && (
+                        <span title={tooltip || 'Flagged for review'} className="cursor-help">
+                          <AlertTriangle size={8} className="inline ml-0.5 mb-0.5" />
+                        </span>
+                      )}
+                    </span>
+                    {isLead && (
+                      <>
+                        {/* Edit button */}
+                        <button
+                          type="button"
+                          onClick={() => isEditing ? setEditingId(null) : startEdit(row)}
+                          title={isEditing ? 'Cancel edit' : 'Edit entry'}
+                          className={cn(
+                            'flex items-center justify-center cursor-pointer transition-colors',
+                            isEditing
+                              ? 'text-[hsl(var(--accent))]'
+                              : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--accent))]'
+                          )}
+                        >
+                          {isEditing ? <X size={11} /> : <Pencil size={11} />}
                         </button>
-                        <button type="button" onClick={() => setConfirming(null)} className="text-[hsl(var(--muted-foreground))] cursor-pointer">
-                          <X size={10} />
+
+                        {/* Delete button */}
+                        {isConfirming ? (
+                          <div className="flex gap-0.5">
+                            <button type="button" onClick={() => handleDelete(row.id!)} disabled={!!deleting}
+                              className="text-[8px] px-1.5 py-0.5 rounded bg-[hsl(var(--destructive))] text-white cursor-pointer font-semibold disabled:opacity-50">
+                              {deleting === row.id ? '…' : 'Del'}
+                            </button>
+                            <button type="button" onClick={() => setConfirming(null)} className="text-[hsl(var(--muted-foreground))] cursor-pointer">
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => { setConfirming(row.id!); setEditingId(null); }}
+                            className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))] cursor-pointer transition-colors">
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Inline edit panel */}
+                  {isEditing && (
+                    <div className="px-3 pb-3 pt-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.25)]">
+                      {isFlagged && tooltip && (
+                        <div className="flex items-start gap-2 mb-3 px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/25">
+                          <AlertTriangle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                          <p className="text-[11px] text-amber-300 leading-snug">{tooltip}</p>
+                        </div>
+                      )}
+                      <FieldEditor
+                        fields={allFields}
+                        data={editData}
+                        notes={editNotes}
+                        onChange={setEditData}
+                        onNotesChange={setEditNotes}
+                      />
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          type="button"
+                          onClick={handleSave}
+                          disabled={saving}
+                          className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] text-xs font-semibold cursor-pointer disabled:opacity-50 hover:opacity-90 transition-opacity"
+                        >
+                          {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                          {saving ? 'Saving…' : 'Save changes'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="flex items-center gap-1 h-7 px-3 rounded-lg border border-[hsl(var(--border))] text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors"
+                        >
+                          <X size={11} /> Cancel
                         </button>
                       </div>
-                    ) : (
-                      <button type="button" onClick={() => setConfirming(row.id!)}
-                        className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))] cursor-pointer transition-colors">
-                        <Trash2 size={11} />
-                      </button>
-                    )
+                    </div>
                   )}
                 </div>
               );
@@ -299,7 +493,7 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
           {filtered.length > 1 && (
             <div className={cn(
               'grid items-center px-3 py-2 bg-[hsl(var(--muted)/0.4)] border-t border-[hsl(var(--border))] text-[10px]',
-              isLead ? 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem_1.5rem]' : 'grid-cols-[2.5rem_3rem_2.5rem_5rem_3rem_3rem_3rem_3.5rem]'
+              colGrid
             )}>
               <span className="text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] col-span-4">avg</span>
               <span className="font-data text-center font-bold text-[hsl(var(--accent))]">{fmt(avg(filtered.map((r) => r.pts.auto)))}</span>
@@ -316,17 +510,20 @@ function RawEntriesView({ matches, allFields, outlierIds, initialTeam = '' }: {
 
 // ── Teams view (per-team aggregate) ──────────────────────────────────────────
 
-function TeamsView({ matches, allFields, outlierIds, initialTeam = '' }: {
+function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
   matches: MatchEntry[];
   allFields: GameField[];
-  outlierIds: Set<string>;
+  outlierTooltips: Map<string, string>;
   initialTeam?: string;
 }) {
+  const { matches: tbaMatches } = useTBAStore();
   const [search, setSearch]   = useState(initialTeam);
   const [sortKey, setSortKey] = useState('total');
   const [expanded, setExpanded] = useState<number | null>(
     initialTeam ? parseInt(initialTeam) || null : null
   );
+
+  const outlierIds = useMemo(() => new Set(outlierTooltips.keys()), [outlierTooltips]);
 
   const byTeam = useMemo(() => {
     const map = new Map<number, MatchEntry[]>();
@@ -374,7 +571,6 @@ function TeamsView({ matches, allFields, outlierIds, initialTeam = '' }: {
       if (sortKey === 'auto') return b.avgAuto - a.avgAuto;
       if (sortKey === 'teleop') return b.avgTeleop - a.avgTeleop;
       if (sortKey === 'endgame') return b.avgEndgame - a.avgEndgame;
-      // field avg sort
       return (b.fieldAvgs[sortKey] ?? 0) - (a.fieldAvgs[sortKey] ?? 0);
     });
     return list;
@@ -466,6 +662,7 @@ function TeamsView({ matches, allFields, outlierIds, initialTeam = '' }: {
                     {sorted.map((e) => {
                       const pts = scorePts(e, allFields);
                       const isOutlier = outlierIds.has(e.id ?? '');
+                      const tip = outlierTooltips.get(e.id ?? '');
                       return (
                         <div key={e.id} className={cn(
                           'flex items-center gap-2 text-[10px] py-1 px-2 rounded',
@@ -478,10 +675,32 @@ function TeamsView({ matches, allFields, outlierIds, initialTeam = '' }: {
                           <span className="text-[hsl(var(--muted-foreground))] truncate flex-1">{e.scoutedByName.split(' ')[0]}</span>
                           <span className="font-data">{pts.auto}+{pts.teleop}+{pts.endgame}</span>
                           <span className={cn('font-data font-bold', isOutlier ? 'text-amber-400' : '')}>={pts.total}</span>
-                          {isOutlier && <AlertTriangle size={8} className="text-amber-400 shrink-0" />}
+                          {isOutlier && (
+                            <span title={tip ?? 'Flagged as outlier'} className="cursor-help shrink-0">
+                              <AlertTriangle size={8} className="text-amber-400" />
+                            </span>
+                          )}
                         </div>
                       );
                     })}
+                    {/* Upcoming unscouted matches from TBA schedule */}
+                    {tbaMatches
+                      .filter((m) => m.comp_level === 'qm' && !entries.some((e) => e.matchNumber === m.match_number) && findTeamSlot(m, team) !== null)
+                      .sort((a, b) => a.match_number - b.match_number)
+                      .map((m) => {
+                        const slot = findTeamSlot(m, team)!;
+                        return (
+                          <div key={m.key} className="flex items-center gap-2 text-[10px] py-1 px-2 rounded opacity-40">
+                            <span className="font-data font-bold text-[hsl(var(--muted-foreground))] w-7">Q{m.match_number}</span>
+                            <span className={cn('font-data font-semibold w-5', slot.alliance === 'red' ? 'text-red-400' : 'text-blue-400')}>
+                              {slot.alliance === 'red' ? 'R' : 'B'}{slot.position}
+                            </span>
+                            <span className="text-[hsl(var(--muted-foreground))] truncate flex-1 italic">upcoming</span>
+                            <span className="font-data text-[hsl(var(--muted-foreground))]">—+—+—</span>
+                            <span className="font-data font-bold text-[hsl(var(--muted-foreground))]">=—</span>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
               )}
@@ -499,7 +718,7 @@ const VW = 480, VH = 300;
 const PAD = { l: 50, r: 20, t: 18, b: 44 };
 const CW = VW - PAD.l - PAD.r;
 const CH = VH - PAD.t - PAD.b;
-const MIN_RANGE = 0.5; // prevent over-zoom
+const MIN_RANGE = 0.5;
 
 function niceStep(range: number, n: number): number {
   if (range <= 0) return 1;
@@ -518,7 +737,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
   const [sel, setSel] = useState<number | null>(null);
   const [zoom, setZoom] = useState<ZoomBox | null>(null);
 
-  // Refs that are always current — used inside non-reactive event handlers
   const zoomRef = useRef<ZoomBox | null>(null);
   const boundsRef = useRef<{ xMax: number; yMax: number } | null>(null);
   const dragRef = useRef<{ cx: number; cy: number; vx0: number; vx1: number; vy0: number; vy1: number } | null>(null);
@@ -568,7 +786,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
     });
   }, [matches, allFields, numericFields]);
 
-  // Reset zoom when axes change
   useEffect(() => { setZoom(null); setSel(null); }, [xKey, yKey]);
 
   const chart = useMemo(() => {
@@ -604,12 +821,9 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
     const lx = axes.find((a) => a.key === xKey)?.label ?? xKey;
     const ly = axes.find((a) => a.key === yKey)?.label ?? yKey;
     const lr = axes.find((a) => a.key === rKey)?.label ?? rKey;
-
     const zoomLevel = zoom ? +((xDataMax / (x1 - x0)).toFixed(1)) : 1;
     return { points, xTicks, yTicks, lx, ly, lr, x0, x1, y0, y1, zoomLevel };
   }, [teamStats, xKey, yKey, rKey, zoom, axes]);
-
-  // ── Coordinate helpers ────────────────────────────────────────────────────
 
   function getSvgXY(clientX: number, clientY: number) {
     const el = svgRef.current;
@@ -625,8 +839,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
     const ny0 = Math.max(0, pivY - (pivY - y0) * f);
     setZoom({ x0: nx0, x1: nx0 + xr, y0: ny0, y1: ny0 + yr });
   }
-
-  // ── Non-passive wheel event (cannot use React synthetic for passive:false) ──
 
   useEffect(() => {
     const el = svgRef.current;
@@ -651,8 +863,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
     return () => el.removeEventListener('wheel', fn);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ── Pointer drag (pan) ────────────────────────────────────────────────────
 
   function onPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if (e.button !== 0 || !chart) return;
@@ -685,8 +895,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
     e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
-  // ── Two-finger pinch zoom ─────────────────────────────────────────────────
-
   function onTouchStart(e: React.TouchEvent<SVGSVGElement>) {
     if (e.touches.length !== 2 || !chart) return;
     e.preventDefault();
@@ -704,7 +912,7 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
     e.preventDefault();
     const t1 = e.touches[0], t2 = e.touches[1];
     const newDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-    const sf = Math.max(0.1, newDist / touchRef.current.dist); // >1 = zoom in
+    const sf = Math.max(0.1, newDist / touchRef.current.dist);
 
     const r = svgRef.current.getBoundingClientRect();
     const s = VW / r.width;
@@ -712,17 +920,14 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
     const xr = Math.max(MIN_RANGE, (vx1 - vx0) / sf);
     const yr = Math.max(MIN_RANGE, (vy1 - vy0) / sf);
 
-    // Initial midpoint → data pivot
     const iSvgX = (imx - r.left) * s;
     const iSvgY = (imy - r.top) * s;
     const pivX = vx0 + ((iSvgX - PAD.l) / CW) * (vx1 - vx0);
     const pivY = vy0 + ((PAD.t + CH - iSvgY) / CH) * (vy1 - vy0);
 
-    // Scale around pivot
     let nx0 = pivX - (pivX - vx0) / sf;
     let ny0 = pivY - (pivY - vy0) / sf;
 
-    // Pan: move pivot from initial midpoint to current midpoint
     const cSvgX = ((t1.clientX + t2.clientX) / 2 - r.left) * s;
     const cSvgY = ((t1.clientY + t2.clientY) / 2 - r.top) * s;
     nx0 -= ((cSvgX - iSvgX) / CW) * xr;
@@ -733,8 +938,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
 
   function onTouchEnd() { touchRef.current = null; }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   const selPt = sel !== null && chart ? chart.points.find((p) => p.team === sel) ?? null : null;
 
   if (matches.length === 0) {
@@ -743,7 +946,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Axis selectors + zoom reset */}
       <div className="flex items-end gap-2">
         <div className="grid grid-cols-3 gap-2 flex-1">
           {([
@@ -752,9 +954,7 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
             { id: 'r', label: 'Bubble', value: rKey, set: setRKey },
           ] as const).map(({ id, label, value, set }) => (
             <div key={id} className="flex flex-col gap-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                {label}
-              </label>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]">{label}</label>
               <select
                 value={value}
                 onChange={(e) => { (set as (v: string) => void)(e.target.value); setSel(null); }}
@@ -778,7 +978,6 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
         )}
       </div>
 
-      {/* SVG chart */}
       {chart && (
         <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.12)] overflow-hidden">
           <svg
@@ -799,16 +998,12 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
                 <rect x={PAD.l} y={PAD.t} width={CW} height={CH} />
               </clipPath>
             </defs>
-
-            {/* Grid */}
             {chart.yTicks.map((v) => {
               const y = PAD.t + CH - ((v - chart.y0) / (chart.y1 - chart.y0)) * CH;
               return (
                 <g key={`yg${v}`}>
-                  <line x1={PAD.l} y1={y} x2={PAD.l + CW} y2={y}
-                    stroke="hsl(var(--border))" strokeWidth="0.6" strokeDasharray="3 3" opacity="0.7" />
-                  <text x={PAD.l - 5} y={y + 3} textAnchor="end" fontSize="7.5"
-                    fill="hsl(var(--muted-foreground))" fontFamily="'JetBrains Mono', monospace">
+                  <line x1={PAD.l} y1={y} x2={PAD.l + CW} y2={y} stroke="hsl(var(--border))" strokeWidth="0.6" strokeDasharray="3 3" opacity="0.7" />
+                  <text x={PAD.l - 5} y={y + 3} textAnchor="end" fontSize="7.5" fill="hsl(var(--muted-foreground))" fontFamily="'JetBrains Mono', monospace">
                     {v % 1 === 0 ? v : v.toFixed(1)}
                   </text>
                 </g>
@@ -818,28 +1013,17 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
               const x = PAD.l + ((v - chart.x0) / (chart.x1 - chart.x0)) * CW;
               return (
                 <g key={`xg${v}`}>
-                  <line x1={x} y1={PAD.t} x2={x} y2={PAD.t + CH}
-                    stroke="hsl(var(--border))" strokeWidth="0.6" strokeDasharray="3 3" opacity="0.7" />
-                  <text x={x} y={PAD.t + CH + 12} textAnchor="middle" fontSize="7.5"
-                    fill="hsl(var(--muted-foreground))" fontFamily="'JetBrains Mono', monospace">
+                  <line x1={x} y1={PAD.t} x2={x} y2={PAD.t + CH} stroke="hsl(var(--border))" strokeWidth="0.6" strokeDasharray="3 3" opacity="0.7" />
+                  <text x={x} y={PAD.t + CH + 12} textAnchor="middle" fontSize="7.5" fill="hsl(var(--muted-foreground))" fontFamily="'JetBrains Mono', monospace">
                     {v % 1 === 0 ? v : v.toFixed(1)}
                   </text>
                 </g>
               );
             })}
-
-            {/* Axis borders */}
             <line x1={PAD.l} y1={PAD.t} x2={PAD.l} y2={PAD.t + CH} stroke="hsl(var(--border))" strokeWidth="1.2" />
             <line x1={PAD.l} y1={PAD.t + CH} x2={PAD.l + CW} y2={PAD.t + CH} stroke="hsl(var(--border))" strokeWidth="1.2" />
-
-            {/* Axis labels */}
-            <text x={PAD.l + CW / 2} y={VH - 5} textAnchor="middle" fontSize="9"
-              fill="hsl(var(--muted-foreground))" fontFamily="system-ui, sans-serif">{chart.lx}</text>
-            <text x={10} y={PAD.t + CH / 2} textAnchor="middle" fontSize="9"
-              fill="hsl(var(--muted-foreground))" fontFamily="system-ui, sans-serif"
-              transform={`rotate(-90, 10, ${PAD.t + CH / 2})`}>{chart.ly}</text>
-
-            {/* Bubbles + labels (clipped to chart area) */}
+            <text x={PAD.l + CW / 2} y={VH - 5} textAnchor="middle" fontSize="9" fill="hsl(var(--muted-foreground))" fontFamily="system-ui, sans-serif">{chart.lx}</text>
+            <text x={10} y={PAD.t + CH / 2} textAnchor="middle" fontSize="9" fill="hsl(var(--muted-foreground))" fontFamily="system-ui, sans-serif" transform={`rotate(-90, 10, ${PAD.t + CH / 2})`}>{chart.ly}</text>
             <g clipPath="url(#chart-area)">
               {[...chart.points]
                 .sort((a, b) => (a.team === sel ? 1 : b.team === sel ? -1 : 0))
@@ -849,49 +1033,32 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
                     <g key={p.team}
                       onClick={(e) => { e.stopPropagation(); if (!movedRef.current) setSel(isSelected ? null : p.team); movedRef.current = false; }}
                       style={{ cursor: 'pointer' }}>
-                      <circle
-                        cx={p.cx} cy={p.cy} r={p.r}
+                      <circle cx={p.cx} cy={p.cy} r={p.r}
                         fill={isSelected ? 'hsla(142,60%,42%,0.45)' : 'hsla(142,60%,42%,0.22)'}
                         stroke={isSelected ? 'hsl(142,60%,55%)' : 'hsl(142,60%,38%)'}
-                        strokeWidth={isSelected ? 1.8 : 0.9}
-                      />
-                      <text
-                        x={p.cx}
-                        y={p.cy > PAD.t + 18 ? p.cy - p.r - 3 : p.cy + p.r + 10}
-                        textAnchor="middle" fontSize="7"
-                        fontWeight={isSelected ? 'bold' : 'normal'}
+                        strokeWidth={isSelected ? 1.8 : 0.9} />
+                      <text x={p.cx} y={p.cy > PAD.t + 18 ? p.cy - p.r - 3 : p.cy + p.r + 10}
+                        textAnchor="middle" fontSize="7" fontWeight={isSelected ? 'bold' : 'normal'}
                         fill={isSelected ? 'hsl(142,60%,70%)' : 'hsl(var(--muted-foreground))'}
-                        fontFamily="'JetBrains Mono', monospace"
-                        style={{ pointerEvents: 'none' }}
-                      >
+                        fontFamily="'JetBrains Mono', monospace" style={{ pointerEvents: 'none' }}>
                         {p.team}
                       </text>
                     </g>
                   );
                 })}
             </g>
-
-            {/* Tooltip for selected bubble */}
             {selPt && (() => {
-              const TW = 120, TH = 62;
+              const TW = 120, TH2 = 62;
               const tx = Math.min(Math.max(selPt.cx - TW / 2, PAD.l + 2), PAD.l + CW - TW - 2);
-              const aboveOk = selPt.cy - selPt.r - TH - 10 >= PAD.t;
-              const ty = aboveOk ? selPt.cy - selPt.r - TH - 10 : selPt.cy + selPt.r + 8;
+              const aboveOk = selPt.cy - selPt.r - TH2 - 10 >= PAD.t;
+              const ty = aboveOk ? selPt.cy - selPt.r - TH2 - 10 : selPt.cy + selPt.r + 8;
               return (
                 <g style={{ pointerEvents: 'none' }}>
-                  <rect x={tx} y={ty} width={TW} height={TH} rx="5"
-                    fill="hsl(var(--primary))" stroke="hsl(142,60%,38%)" strokeWidth="1" opacity="0.97" />
-                  <text x={tx + 8} y={ty + 14} fontSize="10" fontWeight="bold"
-                    fill="hsl(142,60%,60%)" fontFamily="'JetBrains Mono', monospace">Team {selPt.team}</text>
-                  <text x={tx + 8} y={ty + 28} fontSize="8.5"
-                    fill="hsl(var(--foreground))" fontFamily="system-ui, sans-serif">
-                    {chart.lx}: {selPt.xRaw % 1 === 0 ? selPt.xRaw : selPt.xRaw.toFixed(1)}</text>
-                  <text x={tx + 8} y={ty + 41} fontSize="8.5"
-                    fill="hsl(var(--foreground))" fontFamily="system-ui, sans-serif">
-                    {chart.ly}: {selPt.yRaw % 1 === 0 ? selPt.yRaw : selPt.yRaw.toFixed(1)}</text>
-                  <text x={tx + 8} y={ty + 54} fontSize="8.5"
-                    fill="hsl(var(--muted-foreground))" fontFamily="system-ui, sans-serif">
-                    {chart.lr}: {selPt.rRaw % 1 === 0 ? selPt.rRaw : selPt.rRaw.toFixed(1)}</text>
+                  <rect x={tx} y={ty} width={TW} height={TH2} rx="5" fill="hsl(var(--primary))" stroke="hsl(142,60%,38%)" strokeWidth="1" opacity="0.97" />
+                  <text x={tx + 8} y={ty + 14} fontSize="10" fontWeight="bold" fill="hsl(142,60%,60%)" fontFamily="'JetBrains Mono', monospace">Team {selPt.team}</text>
+                  <text x={tx + 8} y={ty + 28} fontSize="8.5" fill="hsl(var(--foreground))" fontFamily="system-ui, sans-serif">{chart.lx}: {selPt.xRaw % 1 === 0 ? selPt.xRaw : selPt.xRaw.toFixed(1)}</text>
+                  <text x={tx + 8} y={ty + 41} fontSize="8.5" fill="hsl(var(--foreground))" fontFamily="system-ui, sans-serif">{chart.ly}: {selPt.yRaw % 1 === 0 ? selPt.yRaw : selPt.yRaw.toFixed(1)}</text>
+                  <text x={tx + 8} y={ty + 54} fontSize="8.5" fill="hsl(var(--muted-foreground))" fontFamily="system-ui, sans-serif">{chart.lr}: {selPt.rRaw % 1 === 0 ? selPt.rRaw : selPt.rRaw.toFixed(1)}</text>
                 </g>
               );
             })()}
@@ -912,10 +1079,17 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
 
 // ── Pit data view ─────────────────────────────────────────────────────────────
 
-function PitsView() {
-  const { pits } = usePits();
-  const [statusFilter, setStatus] = useState<'all' | 'scouted' | 'dibbed' | 'unclaimed'>('all');
-  const [search, setSearch] = useState('');
+function PitsView({ pitFields }: { pitFields: GameField[] }) {
+  const { user } = useAuth();
+  const { pits, editPit } = usePits();
+  const isLead = user?.role === 'lead' || user?.role === 'admin';
+
+  const [statusFilter, setStatus]     = useState<'all' | 'scouted' | 'dibbed' | 'unclaimed'>('all');
+  const [search, setSearch]           = useState('');
+  const [editingTeam, setEditingTeam] = useState<number | null>(null);
+  const [editStatus, setEditStatus]   = useState<'unclaimed' | 'dibbed' | 'scouted'>('unclaimed');
+  const [editData, setEditData]       = useState<Record<string, unknown>>({});
+  const [saving, setSaving]           = useState(false);
 
   const filtered = useMemo(() => {
     let list = [...pits];
@@ -930,13 +1104,30 @@ function PitsView() {
     unclaimed: pits.filter((p) => p.status === 'unclaimed').length,
   }), [pits]);
 
+  function startEdit(p: typeof pits[0]) {
+    setEditingTeam(p.teamNumber);
+    setEditStatus(p.status);
+    setEditData({ ...(p.data ?? {}) });
+  }
+
+  async function handleSave(teamNumber: number) {
+    setSaving(true);
+    try {
+      await editPit(teamNumber, editStatus, editData);
+      setEditingTeam(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Status filter chips */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { key: 'scouted', label: 'Scouted', count: counts.scouted, color: 'text-[hsl(var(--accent))]' },
-          { key: 'dibbed',  label: 'Claimed',  count: counts.dibbed,   color: 'text-amber-400' },
-          { key: 'unclaimed', label: 'Open',   count: counts.unclaimed, color: 'text-[hsl(var(--muted-foreground))]' },
+          { key: 'scouted',   label: 'Scouted', count: counts.scouted,   color: 'text-[hsl(var(--accent))]' },
+          { key: 'dibbed',    label: 'Claimed',  count: counts.dibbed,    color: 'text-amber-400' },
+          { key: 'unclaimed', label: 'Open',     count: counts.unclaimed, color: 'text-[hsl(var(--muted-foreground))]' },
         ].map(({ key, label, count, color }) => (
           <button key={key} type="button" onClick={() => setStatus(statusFilter === key ? 'all' : key as typeof statusFilter)}
             className={cn('rounded-xl border px-3 py-2 text-center cursor-pointer transition-colors',
@@ -954,27 +1145,113 @@ function PitsView() {
       </div>
 
       <div className="rounded-xl border border-[hsl(var(--border))] overflow-hidden">
-        <div className="grid grid-cols-[3rem_4rem_5rem_1fr] text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] px-3 py-2 bg-[hsl(var(--muted)/0.5)] border-b border-[hsl(var(--border))]">
+        {/* Header */}
+        <div className={cn(
+          'grid text-[9px] font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))] px-3 py-2 bg-[hsl(var(--muted)/0.5)] border-b border-[hsl(var(--border))]',
+          isLead ? 'grid-cols-[3rem_3.5rem_5rem_1fr_1.5rem]' : 'grid-cols-[3rem_3.5rem_5rem_1fr]'
+        )}>
           <span>Team</span><span>Loc</span><span>Status</span><span>Scout</span>
+          {isLead && <span />}
         </div>
+
         <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: 'calc(100dvh - 22rem)' }}>
-          {filtered.map((p) => (
-            <div key={p.teamNumber} className="grid grid-cols-[3rem_4rem_5rem_1fr] items-center px-3 py-2 border-b border-[hsl(var(--border)/0.3)] last:border-0 text-[10px]">
-              <span className="font-data font-bold">{p.teamNumber}</span>
-              <span className="font-data text-[hsl(var(--muted-foreground))]">
-                {String.fromCharCode(65 + p.row)}{p.col + 1}
-              </span>
-              <span className={cn('font-semibold',
-                p.status === 'scouted' ? 'text-[hsl(var(--accent))]' :
-                p.status === 'dibbed'  ? 'text-amber-400' : 'text-[hsl(var(--muted-foreground))]')}>
-                {p.status === 'scouted' ? '✓ done' : p.status === 'dibbed' ? '⋯ claimed' : 'open'}
-              </span>
-              <span className="truncate text-[hsl(var(--muted-foreground))]">
-                {p.status === 'scouted' ? (p.scoutedBy?.slice(5) ?? '—') :
-                 p.status === 'dibbed'  ? (p.dibbedByName ?? '—') : '—'}
-              </span>
-            </div>
-          ))}
+          {filtered.map((p) => {
+            const isEditing = editingTeam === p.teamNumber;
+            return (
+              <div key={p.teamNumber} className={cn(isEditing && 'bg-[hsl(var(--muted)/0.3)]')}>
+                {/* Summary row */}
+                <div className={cn(
+                  'grid items-center px-3 py-2 border-b border-[hsl(var(--border)/0.3)] text-[10px] transition-colors',
+                  isEditing ? 'border-[hsl(var(--accent)/0.3)]' : 'last:border-0',
+                  isLead ? 'grid-cols-[3rem_3.5rem_5rem_1fr_1.5rem]' : 'grid-cols-[3rem_3.5rem_5rem_1fr]'
+                )}>
+                  <span className="font-data font-bold">{p.teamNumber}</span>
+                  <span className="font-data text-[hsl(var(--muted-foreground))]">
+                    {String.fromCharCode(65 + p.row)}{p.col + 1}
+                  </span>
+                  <span className={cn('font-semibold',
+                    p.status === 'scouted' ? 'text-[hsl(var(--accent))]' :
+                    p.status === 'dibbed'  ? 'text-amber-400' : 'text-[hsl(var(--muted-foreground))]')}>
+                    {p.status === 'scouted' ? '✓ done' : p.status === 'dibbed' ? '⋯ claimed' : 'open'}
+                  </span>
+                  <span className="truncate text-[hsl(var(--muted-foreground))]">
+                    {p.status === 'scouted' ? (p.scoutedBy?.slice(5) ?? '—') :
+                     p.status === 'dibbed'  ? (p.dibbedByName ?? '—') : '—'}
+                  </span>
+                  {isLead && (
+                    <button
+                      type="button"
+                      onClick={() => isEditing ? setEditingTeam(null) : startEdit(p)}
+                      title={isEditing ? 'Cancel edit' : 'Edit pit entry'}
+                      className={cn(
+                        'flex items-center justify-center cursor-pointer transition-colors',
+                        isEditing ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--accent))]'
+                      )}
+                    >
+                      {isEditing ? <X size={11} /> : <Pencil size={11} />}
+                    </button>
+                  )}
+                </div>
+
+                {/* Inline edit panel */}
+                {isEditing && (
+                  <div className="px-3 pb-3 pt-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.15)]">
+                    {/* Status selector */}
+                    <div className="mb-3">
+                      <div className="text-[9px] font-semibold uppercase tracking-widest text-[hsl(var(--accent)/0.7)] mb-1.5">Status</div>
+                      <div className="flex gap-1.5">
+                        {(['unclaimed', 'dibbed', 'scouted'] as const).map((s) => (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => setEditStatus(s)}
+                            className={cn(
+                              'flex-1 h-7 rounded-lg border text-[10px] font-medium cursor-pointer capitalize transition-colors',
+                              editStatus === s
+                                ? s === 'scouted' ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]'
+                                  : s === 'dibbed' ? 'border-amber-500 bg-amber-500/10 text-amber-400'
+                                  : 'border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]'
+                                : 'border-[hsl(var(--border)/0.5)] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--border))]'
+                            )}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pit data fields */}
+                    {pitFields.length > 0 && (
+                      <FieldEditor
+                        fields={pitFields}
+                        data={editData}
+                        onChange={setEditData}
+                      />
+                    )}
+
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSave(p.teamNumber)}
+                        disabled={saving}
+                        className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] text-xs font-semibold cursor-pointer disabled:opacity-50 hover:opacity-90 transition-opacity"
+                      >
+                        {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                        {saving ? 'Saving…' : 'Save changes'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingTeam(null)}
+                        className="flex items-center gap-1 h-7 px-3 rounded-lg border border-[hsl(var(--border))] text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors"
+                      >
+                        <X size={11} /> Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -989,9 +1266,12 @@ export function DataManagement() {
   const [searchParams] = useSearchParams();
   const initialTeam = searchParams.get('team') ?? '';
 
+  const { user } = useAuth();
   const { currentEvent } = useEventStore();
   const { matches, loading: matchLoading } = useMatches();
   const [tab, setTab] = useState<DataTab>(initialTeam ? 'teams' : 'teams');
+
+  const isLead = user?.role === 'lead' || user?.role === 'admin';
 
   const gameYear = currentEvent?.activeGameYear ?? 2026;
   const game = getGameConfig(gameYear);
@@ -999,15 +1279,19 @@ export function DataManagement() {
     [...game.match.auto, ...game.match.teleop, ...game.match.endgame],
     [game]
   );
+  const pitFields = useMemo(() => game.pit, [game]);
 
-  const outlierIds = useMemo(() => {
-    const ids = new Set<string>();
+  const outlierTooltips = useMemo(() => {
+    const map = new Map<string, string>();
     for (const f of allFields.filter((f) => f.type === 'counter')) {
       for (const issue of findOutliers(matches, f.id, f.label)) {
-        if (issue.matchId) ids.add(issue.matchId);
+        if (issue.matchId) {
+          const existing = map.get(issue.matchId);
+          map.set(issue.matchId, existing ? `${existing}\n${issue.message}` : issue.message);
+        }
       }
     }
-    return ids;
+    return map;
   }, [matches, allFields]);
 
   if (!currentEvent) {
@@ -1015,6 +1299,16 @@ export function DataManagement() {
       <div className="flex flex-col items-center justify-center py-16 gap-3 text-center p-6">
         <CalendarOff size={32} className="text-[hsl(var(--muted-foreground))]" />
         <p className="text-sm text-[hsl(var(--muted-foreground))]">No event selected.</p>
+      </div>
+    );
+  }
+
+  if (!isLead) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-center p-6">
+        <ShieldAlert size={32} className="text-[hsl(var(--muted-foreground))]" />
+        <p className="text-sm font-medium text-[hsl(var(--foreground))]">Access restricted</p>
+        <p className="text-xs text-[hsl(var(--muted-foreground))]">Data management is only available to leads and admins.</p>
       </div>
     );
   }
@@ -1050,9 +1344,9 @@ export function DataManagement() {
           </div>
         ) : (
           <div className="max-w-2xl mx-auto">
-            {tab === 'teams'   && <TeamsView   matches={matches} allFields={allFields} outlierIds={outlierIds} initialTeam={initialTeam} />}
-            {tab === 'entries' && <RawEntriesView matches={matches} allFields={allFields} outlierIds={outlierIds} initialTeam={initialTeam} />}
-            {tab === 'pits'    && <PitsView />}
+            {tab === 'teams'   && <TeamsView   matches={matches} allFields={allFields} outlierTooltips={outlierTooltips} initialTeam={initialTeam} />}
+            {tab === 'entries' && <RawEntriesView matches={matches} allFields={allFields} outlierTooltips={outlierTooltips} initialTeam={initialTeam} />}
+            {tab === 'pits'    && <PitsView pitFields={pitFields} />}
             {tab === 'graph'   && <ScatterView matches={matches} allFields={allFields} />}
           </div>
         )}

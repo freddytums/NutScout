@@ -12,183 +12,16 @@ import { isAtLeastLead } from '@/types/scout';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { PitEntry, AppUser } from '@/types/scout';
-
-// ─── 8-bit Pixel Sprites ──────────────────────────────────────────────────────
-
-// 12 cols × 12 rows per sprite. Each string is one row (exactly 12 chars).
-// '.' = transparent. Other chars map to palette colors.
-
-interface SpriteData {
-  palette: Record<string, string>;
-  body: string[];              // 8 rows (same for both walk frames)
-  legs: [string[], string[]]; // [frame0: 4 rows, frame1: 4 rows]
-}
-
-function mkLegs(b: string, d: string): [string[], string[]] {
-  return [
-    [`..${b}${b}....${b}${b}..`, `..${b}${b}....${b}${b}..`, `..${b}${b}....${b}${b}..`, `..${d}${d}....${d}${d}..`],
-    [`....${b.repeat(4)}....`,   `....${b.repeat(4)}....`,   `....${b.repeat(4)}....`,   `....${d.repeat(4)}....`],
-  ];
-}
-
-const SPRITES: Record<string, SpriteData> = {
-  cat: {
-    palette: { '#': '#E07030', 'd': '#9A3B10', 'e': '#44CC22', 'n': '#FF9999' },
-    body: [
-      '..##....##..',
-      '..##....##..',
-      '############',
-      '###e####e###',
-      '#####n######',
-      '############',
-      '.##########.',
-      '.##########.',
-    ],
-    legs: mkLegs('#', 'd'),
-  },
-  dog: {
-    palette: { '#': '#8B4513', 'd': '#3B1500', 'f': '#5A2D0C', 'e': '#1A1A1A', 'b': '#DEB887' },
-    body: [
-      'ff########ff',
-      'ff########ff',
-      '############',
-      '###e####e###',
-      '#####e######',
-      '###bbbbbb###',
-      '.##########.',
-      '.##########.',
-    ],
-    legs: mkLegs('#', 'f'),
-  },
-  fox: {
-    palette: { '#': '#E04010', 'd': '#7A1800', 'w': '#FFFFFF', 'e': '#1A1A1A' },
-    body: [
-      '..##....##..',
-      '..##....##..',
-      '############',
-      '###e####e###',
-      '#####e######',
-      '###wwwwww###',
-      '.#wwwwwwww#.',
-      '.#wwwwwwww#.',
-    ],
-    legs: mkLegs('#', 'd'),
-  },
-  frog: {
-    palette: { '#': '#22AA22', 'd': '#116611', 'w': '#FFFFFF', 'e': '#FFEE00' },
-    body: [
-      '.ee......ee.',
-      '#ee######ee#',
-      '############',
-      '############',
-      '###wwwwww###',
-      '###wwwwww###',
-      '.##########.',
-      '.##########.',
-    ],
-    legs: mkLegs('#', 'd'),
-  },
-  bunny: {
-    palette: { '#': '#CCCCCC', 'd': '#888888', 'p': '#FF88AA', 'e': '#FF3333' },
-    body: [
-      '..#p....p#..',
-      '..##....##..',
-      '.##########.',
-      '###e####e###',
-      '############',
-      '############',
-      '.##########.',
-      '.##########.',
-    ],
-    legs: mkLegs('#', 'd'),
-  },
-  penguin: {
-    palette: { '#': '#1A1A1A', 'w': '#FFFFFF', 'y': '#FFC200', 'o': '#FF7700' },
-    body: [
-      '....######..',
-      '...########.',
-      '##w######w##',
-      '##w######w##',
-      '#####yy#####',
-      '###wwwwww###',
-      '###wwwwww###',
-      '...########.',
-    ],
-    legs: [
-      ['...##....##.', '...##....##.', '...oo....oo.', '...oo....oo.'],
-      ['....####....', '....####....', '....oooo....', '....oooo....'],
-    ],
-  },
-  bear: {
-    palette: { '#': '#8B4513', 'd': '#3B1500', 't': '#DEB887', 'e': '#1A1A1A' },
-    body: [
-      '.##......##.',
-      '.##......##.',
-      '############',
-      '##e######e##',
-      '###tttttt###',
-      '####te######',
-      '.##########.',
-      '.##########.',
-    ],
-    legs: mkLegs('#', 'd'),
-  },
-  duck: {
-    palette: { '#': '#FFD700', 'd': '#CC8800', 'o': '#FF8C00', 'e': '#1A1A1A' },
-    body: [
-      '....######..',
-      '..##########',
-      '.###########',
-      '.###e#######',
-      '.######ooo..',
-      '############',
-      '.##########.',
-      '..########..',
-    ],
-    legs: mkLegs('#', 'd'),
-  },
-};
-
-const PIXEL = 3; // CSS px per sprite pixel
-const SP_W = 12 * PIXEL;
-const SP_H = 12 * PIXEL;
-
-function PixelSprite({ sprite, frame }: { sprite: SpriteData; frame: 0 | 1 }) {
-  const rows = [...sprite.body, ...sprite.legs[frame]];
-  return (
-    <svg width={SP_W} height={SP_H} style={{ display: 'block', imageRendering: 'pixelated' }}>
-      {rows.flatMap((row, y) =>
-        [...row].flatMap((ch, x) => {
-          if (ch === '.') return [];
-          const fill = sprite.palette[ch];
-          if (!fill) return [];
-          return [<rect key={`${x}-${y}`} x={x * PIXEL} y={y * PIXEL} width={PIXEL} height={PIXEL} fill={fill} />];
-        })
-      )}
-    </svg>
-  );
-}
-
-// Positions scattered around the page: { name, side, left%, top%, walkDelay }
-const ANIMAL_CONFIGS = [
-  { name: 'cat',     from: 'left',  x: 6,  y: 18, delay: 0.0  },
-  { name: 'dog',     from: 'right', x: 74, y: 12, delay: 0.35 },
-  { name: 'fox',     from: 'left',  x: 30, y: 55, delay: 0.7  },
-  { name: 'frog',    from: 'right', x: 58, y: 68, delay: 0.2  },
-  { name: 'bunny',   from: 'left',  x: 48, y: 32, delay: 0.9  },
-  { name: 'penguin', from: 'right', x: 16, y: 74, delay: 0.5  },
-  { name: 'bear',    from: 'left',  x: 67, y: 44, delay: 1.1  },
-  { name: 'duck',    from: 'right', x: 40, y: 85, delay: 0.15 },
-] as const;
+import { NutronsBounce } from '@/components/CelebrationOverlay';
 
 const BEAMS = [
-  { color: '#f472b6', left: '6%',  dur: 1.3, delay: '0s'    },
-  { color: '#facc15', left: '18%', dur: 1.7, delay: '0.28s' },
-  { color: '#4ade80', left: '33%', dur: 1.4, delay: '0.12s' },
-  { color: '#38bdf8', left: '50%', dur: 1.6, delay: '0.45s' },
-  { color: '#a78bfa', left: '66%', dur: 1.5, delay: '0.07s' },
-  { color: '#fb923c', left: '80%', dur: 1.8, delay: '0.35s' },
-  { color: '#f472b6', left: '92%', dur: 1.3, delay: '0.55s' },
+  { color: '#DC2626', left: '6%',  dur: 1.3, delay: '0s'    },
+  { color: '#FFFFFF', left: '18%', dur: 1.7, delay: '0.28s' },
+  { color: '#DC2626', left: '33%', dur: 1.4, delay: '0.12s' },
+  { color: '#FFFFFF', left: '50%', dur: 1.6, delay: '0.45s' },
+  { color: '#DC2626', left: '66%', dur: 1.5, delay: '0.07s' },
+  { color: '#FFFFFF', left: '80%', dur: 1.8, delay: '0.35s' },
+  { color: '#DC2626', left: '92%', dur: 1.3, delay: '0.55s' },
 ];
 
 const BALLS = [
@@ -198,22 +31,12 @@ const BALLS = [
 ];
 
 function DiscoOverlay({ active }: { active: boolean }) {
-  const [frame, setFrame] = useState<0 | 1>(0);
-
-  useEffect(() => {
-    if (!active) return;
-    const id = setInterval(() => setFrame((f) => (f === 0 ? 1 : 0)), 150);
-    return () => clearInterval(id);
-  }, [active]);
-
   if (!active) return null;
-
-  const WALK_DUR = 1.5;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden" aria-hidden>
 
-      {/* Coloured light beams from top */}
+      {/* Red/white light beams from top */}
       {BEAMS.map((b, i) => (
         <div
           key={i}
@@ -248,15 +71,12 @@ function DiscoOverlay({ active }: { active: boolean }) {
         </div>
       ))}
 
-      {/* "Pit Scouting Done!" banner — slides down from top */}
-      <div
-        className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1"
-        style={{ top: 72, animation: 'sprite-walk-left 0s 0s linear forwards' }}
-      >
+      {/* "Pit Scouting Done!" banner */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-16 flex flex-col items-center">
         <div
           className="px-5 py-2 rounded-xl border-2 font-data font-bold tracking-widest text-sm text-center whitespace-nowrap"
           style={{
-            borderColor: '#f472b6',
+            borderColor: '#DC2626',
             background: 'rgba(0,0,0,0.75)',
             animation: 'disco-shimmer 2s linear infinite',
             backdropFilter: 'blur(4px)',
@@ -266,27 +86,8 @@ function DiscoOverlay({ active }: { active: boolean }) {
         </div>
       </div>
 
-      {/* Pixel art animal sprites */}
-      {ANIMAL_CONFIGS.map((cfg, i) => {
-        const sprite = SPRITES[cfg.name];
-        const spriteFrame = ((frame + i) % 2) as 0 | 1;
-        return (
-          <div
-            key={cfg.name}
-            style={{
-              position: 'absolute',
-              left: `${cfg.x}%`,
-              top: `${cfg.y}%`,
-              animation: [
-                `sprite-walk-${cfg.from} ${WALK_DUR}s ${cfg.delay}s cubic-bezier(0.2,0,0.6,1) forwards`,
-                `sprite-dance 0.72s ${cfg.delay + WALK_DUR}s ease-in-out infinite`,
-              ].join(', '),
-            }}
-          >
-            <PixelSprite sprite={sprite} frame={spriteFrame} />
-          </div>
-        );
-      })}
+      {/* Nutrons logos bouncing in zero gravity */}
+      <NutronsBounce />
     </div>
   );
 }

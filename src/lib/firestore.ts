@@ -122,6 +122,25 @@ export async function deleteMatch(eventId: string, matchId: string) {
   await deleteDoc(doc(matchesCol(eventId), matchId));
 }
 
+export async function updateMatchData(
+  eventId: string,
+  matchId: string,
+  data: Record<string, unknown>,
+  notes?: string
+) {
+  const up: Record<string, unknown> = { data };
+  if (notes !== undefined) up.notes = notes;
+  await updateDoc(doc(matchesCol(eventId), matchId), up);
+}
+
+export async function updatePitEntry(
+  eventId: string,
+  teamNumber: number,
+  updates: Partial<Pick<PitEntry, 'status' | 'data'>>
+) {
+  await updateDoc(doc(pitsCol(eventId), String(teamNumber)), updates);
+}
+
 // ─── Data Quality Queries ────────────────────────────────────────────────────
 
 export function subscribeToAllMatches(eventId: string, cb: (matches: MatchEntry[]) => void) {
@@ -191,6 +210,25 @@ export function subscribeToSchedule(eventId: string, cb: (s: GeneratedSchedule |
 
 export async function saveSchedule(eventId: string, schedule: GeneratedSchedule) {
   await setDoc(scheduleDoc(eventId), schedule);
+}
+
+export async function clearSchedule(eventId: string) {
+  await deleteDoc(scheduleDoc(eventId));
+}
+
+export async function patchScheduleSlot(
+  eventId: string,
+  matchKey: string,
+  station: Station,
+  slot: import('@/types/scout').ScheduledSlot | null
+) {
+  const path = `assignments.${matchKey}.${station}`;
+  if (slot) {
+    await updateDoc(scheduleDoc(eventId), { [path]: slot });
+  } else {
+    const { deleteField } = await import('firebase/firestore');
+    await updateDoc(scheduleDoc(eventId), { [path]: deleteField() });
+  }
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────

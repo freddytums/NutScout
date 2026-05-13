@@ -3,16 +3,20 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, AlertTriangle, CheckCircle2, Users, Loader2, CalendarOff,
   ChevronRight, Grid3x3, ClipboardList, BarChart2, Flag, ExternalLink,
+  UserPlus, Clock,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useMatches } from '@/hooks/useMatches';
 import { usePits } from '@/hooks/usePits';
 import { useEventStore } from '@/store/eventStore';
+import { getGameConfig } from '@/config/games';
 import { useTBAStore } from '@/store/tbaStore';
+import { useSchedule } from '@/hooks/useSchedule';
+import { patchScheduleSlot } from '@/lib/firestore';
 import { runAllChecks } from '@/lib/dataQuality';
 import type { DataIssue } from '@/lib/dataQuality';
-import type { MatchEntry } from '@/types/scout';
+import type { MatchEntry, Station, ScheduledSlot } from '@/types/scout';
 import { sortMatches, teamNumberFromKey } from '@/lib/tba';
 import { cn } from '@/lib/utils';
 
@@ -22,19 +26,24 @@ function buildIssueTooltip(issue: DataIssue): string {
   const lines: string[] = [];
 
   if (issue.type === 'outlier') {
-    if (issue.field)              lines.push(`Field: ${issue.field}`);
-    if (issue.value !== undefined) lines.push(`Recorded: ${issue.value}`);
-    if (issue.expected)           lines.push(`Typical range: ${issue.expected}`);
-    if (issue.teamNumber)         lines.push(`Team ${issue.teamNumber} · Q${issue.matchNumber ?? '?'}`);
-    if (issue.matchId)            lines.push(`Entry ID: ${issue.matchId.slice(0, 10)}…`);
+    if (issue.field)               lines.push(`Field: ${issue.field}`);
+    if (issue.value !== undefined)  lines.push(`Recorded: ${issue.value}`);
+    if (issue.expected)            lines.push(`Typical range: ${issue.expected}`);
+    if (issue.teamNumber)          lines.push(`Team ${issue.teamNumber} · Q${issue.matchNumber ?? '?'}`);
+    if (issue.matchId)             lines.push(`Entry ID: ${issue.matchId.slice(0, 10)}…`);
+  } else if (issue.type === 'duplicate') {
+    if (issue.teamNumber)          lines.push(`Team ${issue.teamNumber}`);
+    if (issue.matchNumber)         lines.push(`Q${issue.matchNumber}`);
+    lines.push('Two entries exist for the same match slot.');
+    lines.push('Open Data Management to review and delete one.');
   } else if (issue.type === 'missing') {
-    if (issue.teamNumber)         lines.push(`Team ${issue.teamNumber}`);
+    if (issue.teamNumber)          lines.push(`Team ${issue.teamNumber}`);
     lines.push('Not enough match entries recorded.');
     lines.push('Assign a scout or check the coverage matrix.');
   } else if (issue.type === 'incomplete') {
-    if (issue.teamNumber)         lines.push(`Team ${issue.teamNumber} · Q${issue.matchNumber ?? '?'}`);
+    if (issue.teamNumber)          lines.push(`Team ${issue.teamNumber} · Q${issue.matchNumber ?? '?'}`);
     lines.push('Some fields were left empty in this entry.');
-    if (issue.matchId)            lines.push(`Entry ID: ${issue.matchId.slice(0, 10)}…`);
+    if (issue.matchId)             lines.push(`Entry ID: ${issue.matchId.slice(0, 10)}…`);
   }
 
   return lines.join('\n');
@@ -74,9 +83,23 @@ function IssueRow({ issue, onScout, onFlag, onView }: {
       <div className="flex flex-col gap-1.5 min-w-0 flex-1">
         <span className="text-sm text-[hsl(var(--foreground))] leading-snug">{issue.message}</span>
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge variant={issue.type === 'outlier' ? 'amber' : 'muted'} className="text-[10px]">
+          <Badge
+            variant={issue.type === 'duplicate' ? 'destructive' : issue.type === 'outlier' ? 'amber' : 'muted'}
+            className="text-[10px]"
+          >
             {issue.type}
           </Badge>
+
+          {/* Duplicate → navigate to data page to review and delete */}
+          {issue.type === 'duplicate' && onView && issue.teamNumber != null && (
+            <button
+              type="button"
+              onClick={() => onView(issue.teamNumber!)}
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-[hsl(var(--destructive)/0.45)] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)] cursor-pointer transition-colors"
+            >
+              <ExternalLink size={9} /> View &amp; delete
+            </button>
+          )}
 
           {/* Missing coverage → send lead to scout that team */}
           {issue.type === 'missing' && issue.teamNumber != null && onScout && (
@@ -362,6 +385,198 @@ function ScoutLog({ matches }: { matches: MatchEntry[] }) {
   );
 }
 
+// ─── Coverage Gaps ───────────────────────────────────────────────────────────
+
+function timeAgo(unixSeconds: number): string {
+  const diff = Math.floor(Date.now() / 1000) - unixSeconds;
+  if (diff < 60)   return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+interface MissingSlot {
+  matchNumber: number;
+  station: Station;
+  teamNumber: number;
+  playedAt: number | null;
+  assigned: ScheduledSlot | null;
+}
+
+function CoverageGaps({ matches }: { matches: MatchEntry[] }) {
+  const navigate = useNavigate();
+  const { currentEventId } = useEventStore();
+  const { matches: tbaMatches } = useTBAStore();
+  const { schedule, primaryScouts } = useSchedule();
+  const [assigning, setAssigning] = useState<string | null>(null); // key = `${matchNum}-${station}`
+
+  const qualMatches = useMemo(
+    () => sortMatches(tbaMatches.filter((m) => m.comp_level === 'qm')),
+    [tbaMatches]
+  );
+
+  // Build a set of (matchNumber-alliance-position) that have been scouted
+  const scoutedSlots = useMemo(() => {
+    const s = new Set<string>();
+    matches.forEach((m) => s.add(`${m.matchNumber}-${m.alliance}-${m.alliancePosition}`));
+    return s;
+  }, [matches]);
+
+  // station string → alliance + position
+  function stationParts(station: Station): { alliance: 'red' | 'blue'; pos: 1 | 2 | 3 } {
+    const alliance = station.startsWith('red') ? 'red' : 'blue';
+    const pos = parseInt(station.slice(-1)) as 1 | 2 | 3;
+    return { alliance, pos };
+  }
+
+  // Collect all missing played slots
+  const missingSlots = useMemo((): MissingSlot[] => {
+    const out: MissingSlot[] = [];
+    qualMatches.forEach((m) => {
+      if (!m.actual_time) return; // not yet played
+      (['red1','red2','red3','blue1','blue2','blue3'] as Station[]).forEach((station) => {
+        const { alliance, pos } = stationParts(station);
+        const key = `${m.match_number}-${alliance}-${pos}`;
+        if (scoutedSlots.has(key)) return;
+        const teamKey = m.alliances[alliance].team_keys[pos - 1];
+        const teamNumber = teamKey ? teamNumberFromKey(teamKey) : null;
+        if (!teamNumber) return;
+        const assigned = schedule?.assignments?.[String(m.match_number)]?.[station] ?? null;
+        out.push({ matchNumber: m.match_number, station, teamNumber, playedAt: m.actual_time, assigned });
+      });
+    });
+    return out.sort((a, b) => a.matchNumber - b.matchNumber);
+  }, [qualMatches, scoutedSlots, schedule]);
+
+  // Group by team
+  const byTeam = useMemo(() => {
+    const map = new Map<number, MissingSlot[]>();
+    missingSlots.forEach((s) => {
+      if (!map.has(s.teamNumber)) map.set(s.teamNumber, []);
+      map.get(s.teamNumber)!.push(s);
+    });
+    return [...map.entries()].sort((a, b) => b[1].length - a[1].length);
+  }, [missingSlots]);
+
+  if (tbaMatches.length === 0) return null;
+  if (missingSlots.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-3 py-6">
+          <CheckCircle2 size={24} className="text-[hsl(var(--accent))]" />
+          <span className="text-sm">All played matches have been scouted</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  async function handleAssign(slot: MissingSlot, scout: ScheduledSlot | null) {
+    if (!currentEventId) return;
+    await patchScheduleSlot(currentEventId, String(slot.matchNumber), slot.station, scout);
+    setAssigning(null);
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between pb-2">
+        <div className="flex items-center gap-2">
+          <AlertCircle size={16} className="text-[hsl(var(--destructive))]" />
+          <CardTitle>Missing Coverage</CardTitle>
+        </div>
+        <span className="text-xs text-[hsl(var(--muted-foreground))]">
+          {missingSlots.length} slot{missingSlots.length !== 1 ? 's' : ''} · {byTeam.length} team{byTeam.length !== 1 ? 's' : ''}
+        </span>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {byTeam.map(([teamNum, slots]) => (
+          <div key={teamNum} className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+            {/* Team header */}
+            <div className="flex items-center justify-between px-3 py-2 bg-[hsl(var(--muted)/0.4)] border-b border-[hsl(var(--border)/0.5)]">
+              <span className="font-data font-bold text-sm">Team {teamNum}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-[hsl(var(--destructive))]">{slots.length} missing</span>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/manage/data?team=${teamNum}`)}
+                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:border-[hsl(var(--accent)/0.4)] cursor-pointer transition-colors"
+                >
+                  <ExternalLink size={9} /> Go to data
+                </button>
+              </div>
+            </div>
+            {/* Missing match rows */}
+            <div className="flex flex-col divide-y divide-[hsl(var(--border)/0.4)]">
+              {slots.map((slot) => {
+                const slotKey = `${slot.matchNumber}-${slot.station}`;
+                const isAssigning = assigning === slotKey;
+                const { alliance, pos } = stationParts(slot.station);
+                return (
+                  <div key={slotKey} className="flex items-center gap-2 px-3 py-2">
+                    {/* Match badge */}
+                    <span className={cn(
+                      'font-data text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0',
+                      alliance === 'red' ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/15 text-blue-400'
+                    )}>
+                      Q{slot.matchNumber} {alliance === 'red' ? 'R' : 'B'}{pos}
+                    </span>
+
+                    {/* Assigned scout */}
+                    <div className="flex-1 min-w-0">
+                      {slot.assigned ? (
+                        <span className="text-[11px] text-[hsl(var(--destructive))] truncate">
+                          missed by {slot.assigned.name}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-[hsl(var(--muted-foreground))] italic">unassigned</span>
+                      )}
+                    </div>
+
+                    {/* Time ago */}
+                    {slot.playedAt && (
+                      <span className="flex items-center gap-0.5 text-[10px] text-[hsl(var(--muted-foreground))] shrink-0 font-data">
+                        <Clock size={9} /> {timeAgo(slot.playedAt)}
+                      </span>
+                    )}
+
+                    {/* Assign scout button / picker */}
+                    {isAssigning ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <select
+                          autoFocus
+                          className="text-[10px] bg-[hsl(var(--muted))] border border-[hsl(var(--accent)/0.4)] rounded px-1.5 py-0.5 text-[hsl(var(--foreground))] cursor-pointer"
+                          defaultValue=""
+                          onChange={(e) => {
+                            const scout = primaryScouts.find((u) => u.uid === e.target.value);
+                            if (scout) handleAssign(slot, { uid: scout.uid, name: scout.displayName, photoURL: scout.photoURL ?? undefined });
+                          }}
+                          onBlur={() => setAssigning(null)}
+                        >
+                          <option value="" disabled>Pick scout…</option>
+                          {primaryScouts.map((u) => (
+                            <option key={u.uid} value={u.uid}>{u.displayName}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAssigning(slotKey)}
+                        className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-[hsl(var(--accent)/0.4)] text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.1)] cursor-pointer transition-colors shrink-0"
+                      >
+                        <UserPlus size={9} /> {slot.assigned ? 'Reassign' : 'Assign'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Data Tools card ─────────────────────────────────────────────────────────
 
 type ToolTab = 'matrix' | 'log';
@@ -418,16 +633,20 @@ export function LeadDashboard() {
     return [...new Set(Object.values(assignments))].sort((a, b) => a - b);
   }, [currentEvent]);
 
-  const issues = useMemo(() => runAllChecks(matches, teams), [matches, teams]);
+  const allMatchFields = useMemo(() => {
+    try {
+      const config = getGameConfig(currentEvent?.activeGameYear ?? 2026);
+      return [...config.match.auto, ...config.match.teleop];
+    } catch {
+      return [];
+    }
+  }, [currentEvent?.activeGameYear]);
+
+  const issues = useMemo(() => runAllChecks(matches, allMatchFields), [matches, allMatchFields]);
   const errors = issues.filter((i) => i.severity === 'error');
   const warnings = issues.filter((i) => i.severity === 'warning');
 
   const pitScouted = pits.filter((p) => p.status === 'scouted').length;
-  const matchCounts = useMemo(() => {
-    const counts = new Map<number, number>();
-    matches.forEach((m) => counts.set(m.teamNumber, (counts.get(m.teamNumber) ?? 0) + 1));
-    return counts;
-  }, [matches]);
 
   const avgMatchesPerTeam = teams.length > 0
     ? (matches.length / teams.length).toFixed(1)
@@ -480,27 +699,66 @@ export function LeadDashboard() {
             </Card>
           </div>
 
-          {/* Issues list */}
+          {/* Data quality issues — grouped by severity */}
           {issues.length > 0 ? (
             <Card>
-              <CardHeader><CardTitle>Data Issues</CardTitle></CardHeader>
-              <CardContent>
-                {issues.slice(0, 20).map((issue, i) => (
-                  <IssueRow
-                    key={i}
-                    issue={issue}
-                    onScout={(team) => navigate(`/match?team=${team}`)}
-                    onFlag={async (matchId) => {
-                      const entry = matches.find((m) => m.id === matchId);
-                      await flag(matchId, { ...entry?.flags, needsRescount: true });
-                    }}
-                    onView={(team) => navigate(`/manage/data?team=${team}`)}
-                  />
-                ))}
-                {issues.length > 20 && (
-                  <p className="text-xs text-[hsl(var(--muted-foreground))] pt-2">
-                    +{issues.length - 20} more issues
-                  </p>
+              <CardHeader className="pb-2">
+                <CardTitle>Data Quality</CardTitle>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                  {errors.length > 0 && warnings.length > 0
+                    ? `${errors.length} error${errors.length !== 1 ? 's' : ''} · ${warnings.length} warning${warnings.length !== 1 ? 's' : ''}`
+                    : errors.length > 0
+                    ? `${errors.length} error${errors.length !== 1 ? 's' : ''}`
+                    : `${warnings.length} warning${warnings.length !== 1 ? 's' : ''}`}
+                </p>
+              </CardHeader>
+              <CardContent className="pt-0 flex flex-col gap-0">
+                {errors.length > 0 && (
+                  <div className="mb-3">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-[hsl(var(--destructive))] uppercase tracking-wider pb-2">
+                      <AlertCircle size={10} /> Errors
+                    </div>
+                    {errors.slice(0, 10).map((issue, i) => (
+                      <IssueRow
+                        key={i}
+                        issue={issue}
+                        onScout={(team) => navigate(`/match?team=${team}`)}
+                        onFlag={async (matchId) => {
+                          const entry = matches.find((m) => m.id === matchId);
+                          await flag(matchId, { ...entry?.flags, needsRescount: true });
+                        }}
+                        onView={(team) => navigate(`/manage/data?team=${team}`)}
+                      />
+                    ))}
+                    {errors.length > 10 && (
+                      <p className="text-xs text-[hsl(var(--muted-foreground))] pt-1">+{errors.length - 10} more</p>
+                    )}
+                  </div>
+                )}
+                {errors.length > 0 && warnings.length > 0 && (
+                  <div className="border-t border-[hsl(var(--border)/0.4)] mb-3" />
+                )}
+                {warnings.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-400 uppercase tracking-wider pb-2">
+                      <AlertTriangle size={10} /> Warnings
+                    </div>
+                    {warnings.slice(0, 10).map((issue, i) => (
+                      <IssueRow
+                        key={i}
+                        issue={issue}
+                        onScout={(team) => navigate(`/match?team=${team}`)}
+                        onFlag={async (matchId) => {
+                          const entry = matches.find((m) => m.id === matchId);
+                          await flag(matchId, { ...entry?.flags, needsRescount: true });
+                        }}
+                        onView={(team) => navigate(`/manage/data?team=${team}`)}
+                      />
+                    ))}
+                    {warnings.length > 10 && (
+                      <p className="text-xs text-[hsl(var(--muted-foreground))] pt-1">+{warnings.length - 10} more</p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -516,85 +774,8 @@ export function LeadDashboard() {
           {/* Data troubleshooting tools */}
           <DataTools matches={matches} />
 
-          {/* Teams needing coverage */}
-          {teams.length > 0 && (() => {
-            const MIN = 3;
-            const unscouted = teams.filter((t) => (matchCounts.get(t) ?? 0) === 0);
-            const low = teams.filter((t) => { const c = matchCounts.get(t) ?? 0; return c > 0 && c < MIN; });
-            const covered = teams.length - unscouted.length - low.length;
-
-            if (unscouted.length === 0 && low.length === 0) {
-              return (
-                <Card>
-                  <CardContent className="flex items-center gap-3 py-4">
-                    <CheckCircle2 size={18} className="text-[hsl(var(--accent))] shrink-0" />
-                    <span className="text-sm">All {teams.length} teams have ≥{MIN} match entries</span>
-                  </CardContent>
-                </Card>
-              );
-            }
-
-            return (
-              <Card>
-                <CardHeader className="flex-row items-center justify-between pb-2">
-                  <div className="flex items-center gap-2">
-                    <Users size={16} className="text-[hsl(var(--accent))]" />
-                    <CardTitle>Teams Needing Coverage</CardTitle>
-                  </div>
-                  <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                    {covered}/{teams.length} at ≥{MIN}
-                  </span>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  {unscouted.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium text-[hsl(var(--destructive))] flex items-center gap-1">
-                        <AlertCircle size={11} /> Not yet scouted — {unscouted.length} team{unscouted.length !== 1 ? 's' : ''}
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {unscouted.map((team) => (
-                          <button
-                            key={team}
-                            type="button"
-                            onClick={() => navigate(`/match?team=${team}`)}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[hsl(var(--destructive)/0.45)] bg-[hsl(var(--destructive)/0.07)] hover:bg-[hsl(var(--destructive)/0.13)] cursor-pointer transition-colors"
-                            title="Open match scouting for this team"
-                          >
-                            <span className="font-data text-sm font-bold">{team}</span>
-                            <span className="font-data text-[10px] text-[hsl(var(--destructive))]">0/{MIN}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {low.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium text-amber-400 flex items-center gap-1">
-                        <AlertTriangle size={11} /> Low coverage — {low.length} team{low.length !== 1 ? 's' : ''}
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {low.map((team) => {
-                          const count = matchCounts.get(team) ?? 0;
-                          return (
-                            <button
-                              key={team}
-                              type="button"
-                              onClick={() => navigate(`/match?team=${team}`)}
-                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-500/40 bg-amber-500/07 hover:bg-amber-500/15 cursor-pointer transition-colors"
-                              title="Open match scouting for this team"
-                            >
-                              <span className="font-data text-sm font-bold">{team}</span>
-                              <span className="font-data text-[10px] text-amber-400">{count}/{MIN}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })()}
+          {/* Missing coverage — per-match detail view */}
+          <CoverageGaps matches={matches} />
 
           {/* Quick links */}
           <div className="flex flex-col gap-1">

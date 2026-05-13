@@ -63,6 +63,7 @@ export interface ScheduleOptions {
   method: ScheduleMethod;
   sortOrder: SortOrder;
   matchCounts?: Map<string, number>;
+  fillGaps?: boolean;
 }
 
 export function generateSchedule(
@@ -124,6 +125,31 @@ export function generateSchedule(
     qualOnly.forEach((m, idx) => {
       assignments[m.key] = stationMap(teams[snake[idx % snake.length]]);
     });
+  }
+
+  // Fill any unassigned stations fairly (round-robin by fewest current assignments,
+  // skipping scouts already used in that match).
+  if (options.fillGaps && sorted.length > 0) {
+    const fillCounts = new Map<string, number>(sorted.map((s) => [s.uid, 0]));
+    for (const slots of Object.values(assignments))
+      for (const slot of Object.values(slots))
+        if (slot) fillCounts.set(slot.uid, (fillCounts.get(slot.uid) ?? 0) + 1);
+
+    for (const matchKey of Object.keys(assignments)) {
+      const inMatch = new Set(
+        Object.values(assignments[matchKey]).filter(Boolean).map((s) => s!.uid)
+      );
+      for (const station of STATIONS) {
+        if (assignments[matchKey][station]) continue;
+        const pick = [...sorted]
+          .filter((s) => !inMatch.has(s.uid))
+          .sort((a, b) => (fillCounts.get(a.uid) ?? 0) - (fillCounts.get(b.uid) ?? 0))[0];
+        if (!pick) continue;
+        assignments[matchKey][station] = toSlot(pick);
+        fillCounts.set(pick.uid, (fillCounts.get(pick.uid) ?? 0) + 1);
+        inMatch.add(pick.uid);
+      }
+    }
   }
 
   return {

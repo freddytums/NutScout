@@ -11,7 +11,11 @@
       "PowerShell(Copy-Item *)",
       "PowerShell(Set-Content *)",
       "Bash(npm run *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(node *)",
+      "Bash(python -c \"from PIL import Image; img = Image.open\\('public/NUTRONs.png'\\); print\\(img.size, img.mode\\)\")",
+      "Bash(powershell -command 'Add-Type -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile\\(\\(Resolve-Path '\\\\''public/NUTRONs.png'\\\\''\\)\\); Write-Output \"$\\($img.Width\\)x$\\($img.Height\\)\"; $img.Dispose\\(\\)')",
+      "Bash(gh repo *)"
     ]
   }
 }

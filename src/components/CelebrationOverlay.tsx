@@ -294,7 +294,141 @@ function Pixels() {
   return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
 }
 
-// ── Export ────────────────────────────────────────────────────────────────────
+// ── Nutrons logos — zero-gravity bounce with red/white glow lights ────────────
+
+export function NutronsBounce() {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const W = canvas.width, H = canvas.height;
+
+    const SZ  = 96;           // rendered logo size
+    const RAD = SZ / 2 + 4;  // collision radius
+    const N   = 10;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Drifting glow orbs — red and white
+    const orbs = Array.from({ length: 12 }, () => ({
+      x: r(0, W), y: r(0, H),
+      vx: r(-0.7, 0.7), vy: r(-0.7, 0.7),
+      radius: r(90, 220),
+      isRed: Math.random() > 0.45,
+      phase: r(0, Math.PI * 2),
+    }));
+
+    type Logo = { x: number; y: number; vx: number; vy: number; rot: number; spin: number };
+    const logos: Logo[] = Array.from({ length: N }, () => ({
+      x: r(RAD, W - RAD),
+      y: r(RAD, H - RAD),
+      vx: (Math.random() > 0.5 ? 1 : -1) * r(1.6, 3.8),
+      vy: (Math.random() > 0.5 ? 1 : -1) * r(1.6, 3.8),
+      rot: r(0, Math.PI * 2),
+      spin: r(-0.025, 0.025),
+    }));
+
+    const img = new Image();
+    img.src = `${import.meta.env.BASE_URL}NUTRONs.png`;
+
+    let raf: number;
+    let t = 0;
+
+    function step() {
+      t++;
+      ctx.clearRect(0, 0, W, H);
+
+      // Glow orbs (background lights)
+      for (const orb of orbs) {
+        orb.x += orb.vx; orb.y += orb.vy;
+        if (orb.x < -orb.radius) orb.x = W + orb.radius;
+        if (orb.x > W + orb.radius) orb.x = -orb.radius;
+        if (orb.y < -orb.radius) orb.y = H + orb.radius;
+        if (orb.y > H + orb.radius) orb.y = -orb.radius;
+        const pulse = 0.06 + Math.sin(t * 0.035 + orb.phase) * 0.03;
+        const g = ctx.createRadialGradient(orb.x, orb.y, 0, orb.x, orb.y, orb.radius);
+        if (orb.isRed) {
+          g.addColorStop(0, `rgba(220,38,38,${pulse})`);
+          g.addColorStop(1, 'rgba(220,38,38,0)');
+        } else {
+          g.addColorStop(0, `rgba(255,255,255,${pulse * 0.55})`);
+          g.addColorStop(1, 'rgba(255,255,255,0)');
+        }
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Move logos — zero gravity (no vy += gravity)
+      for (const p of logos) {
+        p.x += p.vx; p.y += p.vy; p.rot += p.spin;
+        if (p.x - RAD < 0)  { p.x = RAD;     p.vx =  Math.abs(p.vx); }
+        if (p.x + RAD > W)  { p.x = W - RAD; p.vx = -Math.abs(p.vx); }
+        if (p.y - RAD < 0)  { p.y = RAD;     p.vy =  Math.abs(p.vy); }
+        if (p.y + RAD > H)  { p.y = H - RAD; p.vy = -Math.abs(p.vy); }
+      }
+
+      // Elastic collisions between logos
+      for (let i = 0; i < logos.length; i++) {
+        for (let j = i + 1; j < logos.length; j++) {
+          const a = logos[i], b = logos[j];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const d = Math.hypot(dx, dy);
+          const minD = RAD * 2;
+          if (d < minD && d > 0) {
+            const nx = dx / d, ny = dy / d;
+            const rv = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+            if (rv > 0) {
+              a.vx -= rv * nx; a.vy -= rv * ny;
+              b.vx += rv * nx; b.vy += rv * ny;
+            }
+            const ov = (minD - d) / 2;
+            a.x -= nx * ov; a.y -= ny * ov;
+            b.x += nx * ov; b.y += ny * ov;
+          }
+        }
+      }
+
+      // Draw logos with red glow
+      for (const p of logos) {
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.shadowColor = 'rgba(220,38,38,0.85)';
+        ctx.shadowBlur = 20;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        if (img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, -SZ / 2, -SZ / 2, SZ, SZ);
+        } else {
+          ctx.fillStyle = '#DC2626';
+          ctx.beginPath(); ctx.arc(0, 0, RAD - 2, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      raf = requestAnimationFrame(step);
+    }
+
+    function start() { raf = requestAnimationFrame(step); }
+    if (img.complete && img.naturalWidth > 0) start(); else img.onload = start;
+
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
+}
+
+// ── Exports ───────────────────────────────────────────────────────────────────
+
+export function NutronsCelebrationOverlay() {
+  return (
+    <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden">
+      <NutronsBounce />
+    </div>
+  );
+}
 
 export function CelebrationOverlay() {
   const [kind] = useState<Kind>(() => pick(KINDS));

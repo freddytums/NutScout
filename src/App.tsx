@@ -13,6 +13,7 @@ const Assignments = lazy(() => import('@/pages/Assignments').then((m) => ({ defa
 const Leaderboard = lazy(() => import('@/pages/Leaderboard').then((m) => ({ default: m.Leaderboard })));
 const Profile = lazy(() => import('@/pages/Profile').then((m) => ({ default: m.Profile })));
 const UserManagement = lazy(() => import('@/pages/UserManagement').then((m) => ({ default: m.UserManagement })));
+const ManageSchedule = lazy(() => import('@/pages/ManageSchedule').then((m) => ({ default: m.ManageSchedule })));
 const ManageHub = lazy(() => import('@/pages/ManageHub').then((m) => ({ default: m.ManageHub })));
 const LeadDashboard = lazy(() => import('@/pages/LeadDashboard').then((m) => ({ default: m.LeadDashboard })));
 const DataManagement = lazy(() => import('@/pages/DataManagement').then((m) => ({ default: m.DataManagement })));
@@ -71,6 +72,7 @@ function App() {
                 <Route path="dashboard" element={<LeadDashboard />} />
                 <Route path="data" element={<DataManagement />} />
                 <Route path="users" element={<UserManagement />} />
+                <Route path="schedule" element={<ManageSchedule />} />
               </Route>
 
               {/* Backward-compat redirects so old links / bookmarks keep working */}

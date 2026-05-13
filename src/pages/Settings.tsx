@@ -202,86 +202,97 @@ export function Settings() {
         </Card>
       )}
 
-      {/* TBA Event Sync */}
-      <Card>
-        <CardHeader className="flex-row items-center gap-2 pb-2">
-          <CalendarDays size={15} className="text-[hsl(var(--accent))]" />
-          <CardTitle>Sync Event from TBA</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {currentEvent && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-[hsl(var(--muted-foreground))]">Active:</span>
-              <span className="text-[hsl(var(--foreground))] font-medium">{currentEvent.name}</span>
-              <Badge variant="secondary" className="font-data">{currentEvent.eventKey}</Badge>
+      {/* TBA Event Sync — admin only */}
+      {isAdmin ? (
+        <Card>
+          <CardHeader className="flex-row items-center gap-2 pb-2">
+            <CalendarDays size={15} className="text-[hsl(var(--accent))]" />
+            <CardTitle>Sync Event from TBA</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {currentEvent && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-[hsl(var(--muted-foreground))]">Active:</span>
+                <span className="text-[hsl(var(--foreground))] font-medium">{currentEvent.name}</span>
+                <Badge variant="secondary" className="font-data">{currentEvent.eventKey}</Badge>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={eventKeyInput}
+                onChange={(e) => setEventKeyInput(e.target.value.toLowerCase())}
+                className="flex-1 h-10 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 text-sm font-data focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--primary))]"
+                placeholder="e.g. 2026casd"
+              />
+              <Button
+                onClick={handleSync}
+                loading={isSyncing}
+                disabled={!eventKeyInput.trim() || !appConfig.tbaKey}
+                className="gap-2 shrink-0"
+              >
+                <RefreshCw size={14} />
+                {status === 'fetching' ? 'Fetching…' : status === 'writing' ? 'Saving…' : 'Sync'}
+              </Button>
             </div>
-          )}
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={eventKeyInput}
-              onChange={(e) => setEventKeyInput(e.target.value.toLowerCase())}
-              className="flex-1 h-10 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted))] px-3 text-sm font-data focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--primary))]"
-              placeholder="e.g. 2026casd"
-            />
-            <Button
-              onClick={handleSync}
-              loading={isSyncing}
-              disabled={!eventKeyInput.trim() || !appConfig.tbaKey}
-              className="gap-2 shrink-0"
-            >
-              <RefreshCw size={14} />
-              {status === 'fetching' ? 'Fetching…' : status === 'writing' ? 'Saving…' : 'Sync'}
-            </Button>
-          </div>
+            {!appConfig.tbaKey && (
+              <p className="text-xs text-amber-400">Set the shared TBA key above first</p>
+            )}
 
-          {!appConfig.tbaKey && (
-            <p className="text-xs text-amber-400">
-              {isAdmin ? 'Set the shared TBA key above first' : `TBA key not set — contact ${appConfig.adminName}`}
-            </p>
-          )}
-
-          {status === 'done' && tbaEvent && (
-            <div className="rounded-lg border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.05)] p-3 flex flex-col gap-1.5">
-              <div className="flex items-center gap-2 text-sm text-[hsl(var(--accent))]">
-                <CheckCircle2 size={14} />
-                Synced successfully
-              </div>
-              <div className="text-sm font-medium">{tbaEvent.name}</div>
-              <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                {teams.length} teams · {matches.length} matches
-              </div>
-              {lastSynced && (
-                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                  Last synced {format(lastSynced, 'MMM d, h:mm a')}
+            {status === 'done' && tbaEvent && (
+              <div className="rounded-lg border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.05)] p-3 flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 text-sm text-[hsl(var(--accent))]">
+                  <CheckCircle2 size={14} />
+                  Synced successfully
                 </div>
+                <div className="text-sm font-medium">{tbaEvent.name}</div>
+                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                  {teams.length} teams · {matches.length} matches
+                </div>
+                {lastSynced && (
+                  <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                    Last synced {format(lastSynced, 'MMM d, h:mm a')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {status === 'error' && error && (
+              <div className="rounded-lg border border-[hsl(var(--destructive)/0.4)] bg-[hsl(var(--destructive)/0.08)] p-3 flex items-start gap-2">
+                <AlertCircle size={14} className="text-[hsl(var(--destructive))] mt-0.5 shrink-0" />
+                <span className="text-xs text-[hsl(var(--destructive))]">{error}</span>
+              </div>
+            )}
+
+            <div className="border-t border-[hsl(var(--border)/0.5)] pt-3 flex flex-col gap-2">
+              <Button variant="secondary" size="sm" onClick={handleCreateDemoEvent} loading={demoLoading} className="gap-2 w-full">
+                {demoLoading ? 'Seeding mid-event data…' : 'Load Demo Event (mid-event state)'}
+              </Button>
+              {demoDone && (
+                <p className="text-xs text-[hsl(var(--accent))]">
+                  Demo loaded — 40 teams, 18 completed matches, mixed pit status. Event is now active.
+                </p>
+              )}
+              {demoError && (
+                <p className="text-xs text-[hsl(var(--destructive))]">{demoError}</p>
               )}
             </div>
-          )}
-
-          {status === 'error' && error && (
-            <div className="rounded-lg border border-[hsl(var(--destructive)/0.4)] bg-[hsl(var(--destructive)/0.08)] p-3 flex items-start gap-2">
-              <AlertCircle size={14} className="text-[hsl(var(--destructive))] mt-0.5 shrink-0" />
-              <span className="text-xs text-[hsl(var(--destructive))]">{error}</span>
-            </div>
-          )}
-
-          <div className="border-t border-[hsl(var(--border)/0.5)] pt-3 flex flex-col gap-2">
-            <Button variant="secondary" size="sm" onClick={handleCreateDemoEvent} loading={demoLoading} className="gap-2 w-full">
-              {demoLoading ? 'Seeding mid-event data…' : 'Load Demo Event (mid-event state)'}
-            </Button>
-            {demoDone && (
-              <p className="text-xs text-[hsl(var(--accent))]">
-                Demo loaded — 40 teams, 18 completed matches, mixed pit status. Event is now active.
-              </p>
-            )}
-            {demoError && (
-              <p className="text-xs text-[hsl(var(--destructive))]">{demoError}</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : currentEvent && (
+        <Card>
+          <CardHeader className="flex-row items-center gap-2 pb-2">
+            <CalendarDays size={15} className="text-[hsl(var(--accent))]" />
+            <CardTitle>Active Event</CardTitle>
+          </CardHeader>
+          <CardContent className="flex items-center gap-2 text-sm">
+            <span className="text-[hsl(var(--foreground))] font-medium">{currentEvent.name}</span>
+            <Badge variant="secondary" className="font-data">{currentEvent.eventKey}</Badge>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Demo scout seeder */}
       {isAdmin && (

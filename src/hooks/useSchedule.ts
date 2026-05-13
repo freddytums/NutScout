@@ -67,9 +67,9 @@ export function useSchedule() {
   }
 
   const generate = useCallback(
-    async (method: ScheduleMethod, sortOrder: SortOrder) => {
+    async (method: ScheduleMethod, sortOrder: SortOrder, fillGaps = false) => {
       if (!currentEventId) return;
-      const generated = generateSchedule(tbaMatches, primaryScouts, { method, sortOrder, matchCounts });
+      const generated = generateSchedule(tbaMatches, primaryScouts, { method, sortOrder, matchCounts, fillGaps });
       await saveSchedule(currentEventId, generated);
 
       // Notify all primary scouts that the schedule was updated

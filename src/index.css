@@ -74,6 +74,21 @@
   }
 }
 
+/* ── Flagged-entry glow ──────────────────────────────────────────────────── */
+@keyframes flag-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px hsl(38 92% 50% / 0.2),
+                inset 3px 0 0 hsl(38 92% 50% / 0.55);
+  }
+  50% {
+    box-shadow: 0 0 20px hsl(38 92% 50% / 0.45),
+                inset 3px 0 0 hsl(38 92% 50% / 1);
+  }
+}
+.flag-glow {
+  animation: flag-glow 2.5s ease-in-out infinite;
+}
+
 /* ── Pit-map disco overlay animations ────────────────────────────────────── */
 
 /* Walk in from off-screen left, land at translateX(0) */

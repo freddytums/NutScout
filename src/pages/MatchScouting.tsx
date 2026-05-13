@@ -26,9 +26,10 @@ const STEP_LABELS: Record<Step, string> = {
   done: 'Submitted',
 };
 
-function MatchPicker({ onSelect, scoutedSet }: {
+function MatchPicker({ onSelect, scoutedSet, flaggedSet }: {
   onSelect: (match: TBAMatch, teamNumber: number, alliance: 'red' | 'blue', position: 1 | 2 | 3) => void;
   scoutedSet: Set<string>;
+  flaggedSet: Set<string>;
 }) {
   const { matches } = useTBAStore();
   const [search, setSearch] = useState('');
@@ -105,16 +106,21 @@ function MatchPicker({ onSelect, scoutedSet }: {
               {(['red', 'blue'] as const).map((alliance) =>
                 match.alliances[alliance].team_keys.map((key, idx) => {
                   const tn = teamNumberFromKey(key);
-                  const isScouted = scoutedSet.has(`${match.match_number}-${tn}`);
+                  const cellKey = `${match.match_number}-${tn}`;
+                  const isFlagged = flaggedSet.has(cellKey);
+                  const isScouted = scoutedSet.has(cellKey);
                   const isTarget = !!selectedTeam && tn === parseInt(selectedTeam);
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => onSelect(match, tn, alliance, (idx + 1) as 1 | 2 | 3)}
+                      title={isFlagged ? '⚠ Flagged — data may need review' : undefined}
                       className={cn(
                         'py-1.5 text-[10px] font-data text-center transition-all cursor-pointer active:scale-95',
-                        isScouted
+                        isFlagged
+                          ? 'bg-amber-500/35 text-amber-100 font-bold'
+                          : isScouted
                           ? 'bg-[hsl(142,60%,42%,0.25)] text-[hsl(142,60%,55%)] font-bold'
                           : isTarget
                           ? alliance === 'red'
@@ -125,7 +131,7 @@ function MatchPicker({ onSelect, scoutedSet }: {
                           : 'text-blue-400/70 hover:bg-blue-500/10'
                       )}
                     >
-                      {tn}
+                      {isFlagged ? '⚠' : tn}
                     </button>
                   );
                 })
@@ -162,6 +168,15 @@ export function MatchScouting() {
 
   const scoutedSet = useMemo(
     () => new Set(submittedMatches.map((m) => `${m.matchNumber}-${m.teamNumber}`)),
+    [submittedMatches]
+  );
+
+  const flaggedSet = useMemo(
+    () => new Set(
+      submittedMatches
+        .filter((m) => !!(m.flags?.needsRescount || m.flags?.outlier || m.flags?.duplicate))
+        .map((m) => `${m.matchNumber}-${m.teamNumber}`)
+    ),
     [submittedMatches]
   );
 
@@ -370,6 +385,7 @@ export function MatchScouting() {
                 {showMatchPicker && (
                   <MatchPicker
                     scoutedSet={scoutedSet}
+                    flaggedSet={flaggedSet}
                     onSelect={(match, teamNumber, alliance, position) => {
                       setMeta((m) => ({
                         ...m,

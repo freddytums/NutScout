@@ -1,18 +1,42 @@
 import type { MatchEntry } from '@/types/scout';
+import type { GameField } from '@/types/game';
 
 export interface DataIssue {
-  type: 'missing' | 'outlier' | 'incomplete';
+  type: 'missing' | 'outlier' | 'incomplete' | 'duplicate';
   severity: 'error' | 'warning';
   teamNumber?: number;
   matchNumber?: number;
   matchId?: string;
+  duplicateMatchId?: string;
   field?: string;
   message: string;
   value?: number;
   expected?: string;
 }
 
-// Find outliers using IQR method on numeric fields
+export function findDuplicates(matches: MatchEntry[]): DataIssue[] {
+  const seen = new Map<string, string>();
+  const issues: DataIssue[] = [];
+  matches.forEach((m) => {
+    const key = `${m.teamNumber}-${m.matchNumber}-${m.alliance}-${m.alliancePosition}`;
+    const existingId = seen.get(key);
+    if (existingId !== undefined) {
+      issues.push({
+        type: 'duplicate',
+        severity: 'error',
+        teamNumber: m.teamNumber,
+        matchNumber: m.matchNumber,
+        matchId: m.id,
+        duplicateMatchId: existingId,
+        message: `Duplicate: Team ${m.teamNumber} Q${m.matchNumber} ${m.alliance === 'red' ? 'R' : 'B'}${m.alliancePosition} has 2 entries`,
+      });
+    } else {
+      seen.set(key, m.id ?? '');
+    }
+  });
+  return issues;
+}
+
 export function findOutliers(
   matches: MatchEntry[],
   fieldId: string,
@@ -28,6 +52,10 @@ export function findOutliers(
   const q1 = sorted[Math.floor(sorted.length * 0.25)].val;
   const q3 = sorted[Math.floor(sorted.length * 0.75)].val;
   const iqr = q3 - q1;
+
+  // Skip degenerate case — no variance means no meaningful outlier detection
+  if (iqr === 0) return [];
+
   const low = q1 - 1.5 * iqr;
   const high = q3 + 1.5 * iqr;
 
@@ -42,11 +70,11 @@ export function findOutliers(
       field: fieldId,
       value: v.val,
       expected: `${q1.toFixed(1)}–${q3.toFixed(1)}`,
-      message: `Team ${v.team} match ${v.match}: ${label} = ${v.val} (outlier, typical ${q1.toFixed(0)}–${q3.toFixed(0)})`,
+      message: `Team ${v.team} Q${v.match}: ${label} = ${v.val} (outlier, typical ${q1.toFixed(0)}–${q3.toFixed(0)})`,
     }));
 }
 
-// Find teams with low match coverage
+// Kept for external use — CoverageGaps handles this more actionably in the UI
 export function findMissingCoverage(
   matches: MatchEntry[],
   expectedTeams: number[],
@@ -67,12 +95,11 @@ export function findMissingCoverage(
     }));
 }
 
-export function runAllChecks(matches: MatchEntry[], expectedTeams: number[]): DataIssue[] {
+export function runAllChecks(matches: MatchEntry[], fields: GameField[]): DataIssue[] {
+  const numericFields = fields.filter((f) => f.type === 'counter' || f.type === 'rating');
   const issues: DataIssue[] = [
-    ...findMissingCoverage(matches, expectedTeams),
-    ...findOutliers(matches, 'teleop_coral_l4', 'L4 coral'),
-    ...findOutliers(matches, 'teleop_coral_l3', 'L3 coral'),
-    ...findOutliers(matches, 'auto_coral_l4', 'Auto L4'),
+    ...findDuplicates(matches),
+    ...numericFields.flatMap((f) => findOutliers(matches, f.id, f.label)),
   ];
   return issues.sort((a, b) => (a.severity === 'error' ? -1 : 1) - (b.severity === 'error' ? -1 : 1));
 }

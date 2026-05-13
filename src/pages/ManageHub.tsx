@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Navigate } from 'react-router-dom';
-import { LayoutDashboard, BarChart2, Users } from 'lucide-react';
+import { LayoutDashboard, BarChart2, Users, CalendarDays } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { isAtLeastLead } from '@/types/scout';
 import { cn } from '@/lib/utils';
@@ -10,9 +10,10 @@ export function ManageHub() {
   if (!user || !isAtLeastLead(user.role)) return <Navigate to="/match" replace />;
 
   const tabs = [
-    { to: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: 'data',      icon: BarChart2,       label: 'Data'      },
+    { to: 'dashboard', icon: LayoutDashboard, label: 'Dashboard'        },
+    { to: 'data',      icon: BarChart2,       label: 'Data'             },
     ...(user.role === 'admin' ? [{ to: 'users', icon: Users, label: 'Users' }] : []),
+    { to: 'schedule',  icon: CalendarDays,    label: 'Scouting Schedule' },
   ] as const;
 
   return (
