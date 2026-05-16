@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { X, Clock, ChevronRight, Zap, Bell, CheckCircle2, Trophy } from 'lucide-react';
 import { NutronsCelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -78,9 +79,22 @@ function MySchedule({ uid, myStation }: { uid: string; myStation: Station | null
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center gap-2 pb-2">
-        <Clock size={15} className="text-[hsl(var(--accent))]" />
-        <CardTitle>Your Schedule</CardTitle>
+      <CardHeader className="flex-row items-center justify-between pb-2">
+        <div className="flex items-center gap-2">
+          <Clock size={15} className="text-[hsl(var(--accent))]" />
+          <CardTitle>Your Schedule</CardTitle>
+        </div>
+        <HelpButton content={{
+          title: 'Assignments',
+          description: 'Shows which robot you\'re assigned to scout in each upcoming match, based on the lead\'s generated schedule.',
+          steps: [
+            { heading: 'Your slot', detail: 'Each row shows a match number, your alliance station (R1–B3), and the team you\'re scouting.' },
+            { heading: 'Status colors', detail: 'Green = submitted · Amber = missed (match played, no entry) · White = upcoming.' },
+            { heading: 'Quick launch', detail: 'Tap a row to jump straight into Match Scouting pre-filled with that match and team.' },
+            { heading: 'Notifications', detail: 'You\'ll receive a notification when the lead updates the schedule.' },
+          ],
+          tip: 'If no schedule appears, ask your lead to generate one from Manage → Schedule.',
+        }} />
       </CardHeader>
       <CardContent className="flex flex-col divide-y divide-[hsl(var(--border)/0.5)]">
         {rows.map(({ match, station, teamNum }) => {

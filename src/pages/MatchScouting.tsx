@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Button } from '@/components/ui/button';
@@ -353,7 +354,21 @@ export function MatchScouting() {
           </div>
         ))}
       </div>
-      <h2 className="text-base font-semibold">{STEP_LABELS[step]}</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">{STEP_LABELS[step]}</h2>
+        <HelpButton content={{
+          title: 'Match Scouting',
+          description: 'Record one robot\'s performance during a single qualification match. Fill out all four steps before submitting.',
+          steps: [
+            { heading: 'Setup', detail: 'Pick the match from the quick-fill grid, or manually enter match #, team, alliance, and position.' },
+            { heading: 'Auto (20 sec)', detail: 'Track what the robot did without driver input — starting zone, game pieces scored, and any auto climb.' },
+            { heading: 'Teleop (2:20)', detail: 'Count scored pieces using the +1/+5/+10 buttons. Note defense, passing, and any fouls.' },
+            { heading: 'Endgame', detail: 'Record the final climb level and any match flags (penalties, breakdown, etc.).' },
+            { heading: 'Submit', detail: 'Data syncs instantly to all devices. You\'ll see a confirmation screen.' },
+          ],
+          tip: 'Tap a green cell in the match picker to review an already-scouted entry for that slot.',
+        }} />
+      </div>
 
       {step === 'meta' && (
         <Card>

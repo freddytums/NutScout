@@ -1,4 +1,5 @@
 import { useState, useMemo, type ReactNode } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, AlertTriangle, CheckCircle2, Users, Loader2, CalendarOff,
@@ -675,7 +676,21 @@ export function LeadDashboard() {
 
   return (
     <div className="p-4 flex flex-col gap-4 max-w-2xl mx-auto">
-      <h2 className="text-base font-semibold">Scouting Lead Dashboard</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">Scouting Lead Dashboard</h2>
+        <HelpButton content={{
+          title: 'Lead Dashboard',
+          description: 'Command center for the scouting lead. Monitor data quality and coverage gaps in real time.',
+          steps: [
+            { heading: 'Summary cards', detail: 'Quick counts of match entries, pits scouted, data errors, and warnings.' },
+            { heading: 'Data Issues', detail: 'Duplicates, outlier values, and missing coverage — with one-click fixes like Flag Recount and Scout Now.' },
+            { heading: 'Missing Coverage', detail: 'Lists every played qual match with no entry, who was assigned, and how long ago it happened.' },
+            { heading: 'Coverage Matrix', detail: 'Full match grid — green = scouted, red = missed, gray = upcoming.' },
+            { heading: 'Scout Log', detail: 'Per-scout submission count and history. Expand a row to see every match they submitted.' },
+          ],
+          tip: 'Tap any team badge in the issues list to jump directly to their data page.',
+        }} />
+      </div>
 
       {!currentEvent && !loading ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">

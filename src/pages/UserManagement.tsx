@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { Search, ChevronDown, Star, StarOff, Trash2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -234,7 +235,20 @@ export function UserManagement() {
 
   return (
     <div className="p-4 flex flex-col gap-4 max-w-2xl mx-auto">
-      <h2 className="text-base font-semibold">User Management</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold">User Management</h2>
+        <HelpButton content={{
+          title: 'User Management',
+          description: 'View and manage every scout\'s role, primary scout status, and team. Admins only.',
+          steps: [
+            { heading: 'Roles', detail: 'Scout = basic scouting access · Lead = dashboard + data management · Admin = full settings + user management.' },
+            { heading: 'Primary Scout', detail: 'Only scouts marked as Primary appear in the schedule generator. Toggle the star icon.' },
+            { heading: 'Edit a user', detail: 'Tap the pencil to change display name, role, or team affiliation.' },
+            { heading: 'Remove a user', detail: 'Tap the trash icon to delete the account from the app (does not delete scouting data).' },
+          ],
+          tip: 'Changing a role takes effect immediately — the scout will see the new permissions on their next page load.',
+        }} />
+      </div>
 
       {/* Summary chips */}
       <div className="flex flex-wrap gap-2">

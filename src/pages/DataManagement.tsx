@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, type ReactNode } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, ChevronDown, AlertTriangle,
@@ -1565,8 +1566,19 @@ export function DataManagement() {
     <div className="flex flex-col h-full">
       {/* Tab bar */}
       <div className="flex border-b border-[hsl(var(--border))] bg-[hsl(var(--primary))] shrink-0">
-        <div className="flex-1 flex items-center px-4">
+        <div className="flex items-center gap-2 px-4">
           <span className="font-[Orbitron] text-xs font-bold tracking-widest text-[hsl(var(--muted-foreground))]">DATA</span>
+          <HelpButton content={{
+            title: 'Data Management',
+            description: 'Browse, correct, and analyze all scouted data for the event. Leads and admins only.',
+            steps: [
+              { heading: 'Teams tab', detail: 'Per-team averages sorted by score. Tap a row to expand and see the breakdown and per-match history.' },
+              { heading: 'Entries tab', detail: 'Every individual match entry. Filter by team, match, scout, or flagged status. Tap ✏ to edit any field value.' },
+              { heading: 'Pits tab', detail: 'All pit scouting records. Tap ✏ to edit status or pit data inline.' },
+              { heading: 'Graph tab', detail: 'Scatter/bubble chart. Pick X axis, Y axis, and bubble size to compare any two metrics across all teams. Scroll to zoom, drag to pan.' },
+            ],
+            tip: 'Amber rows in Entries are statistical outliers. Hover the ⚠ icon to see which field triggered the flag.',
+          }} />
         </div>
         {tabs.map((t) => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}

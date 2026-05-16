@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { Trophy, Flame } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -88,9 +89,20 @@ export function Leaderboard() {
 
   return (
     <div className="p-4 flex flex-col gap-4 max-w-lg mx-auto">
-      <div className="flex items-center gap-2">
-        <Trophy size={18} className="text-[hsl(var(--accent))]" />
-        <h2 className="text-base font-semibold">Scout Leaderboard</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Trophy size={18} className="text-[hsl(var(--accent))]" />
+          <h2 className="text-base font-semibold">Scout Leaderboard</h2>
+        </div>
+        <HelpButton content={{
+          title: 'Scout Leaderboard',
+          description: 'Ranks scouts by how many match entries they\'ve submitted for this event.',
+          steps: [
+            { heading: 'Ranking', detail: 'Scouts ordered by total match entries submitted.' },
+            { heading: 'Hot streak 🔥', detail: 'Shown when a scout has submitted 3+ entries in a row recently.' },
+            { heading: 'Data coverage', detail: 'More submissions = more reliable team rankings in the Data tab.' },
+          ],
+        }} />
       </div>
 
       {stats.length === 0 ? (

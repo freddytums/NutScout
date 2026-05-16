@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { X, CheckCircle2, Hand, ClipboardList, Loader2, UserPlus } from 'lucide-react';
 import { PitCell } from '@/components/pit-map/PitCell';
 import { Badge } from '@/components/ui/badge';
@@ -191,7 +192,20 @@ export function PitMap() {
     <div className="flex flex-col gap-4 p-4 max-w-2xl mx-auto">
       {/* Header stats */}
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">Pit Map</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold">Pit Map</h2>
+          <HelpButton content={{
+            title: 'Pit Map',
+            description: 'A visual grid of the pit area. Coordinate with your team so every robot gets scouted exactly once.',
+            steps: [
+              { heading: 'Find a team', detail: 'Each cell shows a team number at their pit location. Tap a cell to see details.' },
+              { heading: 'Dib a pit', detail: 'Tap "Claim" to dib the pit — other scouts will see it\'s taken so nobody doubles up.' },
+              { heading: 'Scout it', detail: 'Visit the robot and collect data in Pit Scouting, then mark the pit done.' },
+              { heading: 'Color legend', detail: 'Green = scouted ✓  ·  Amber = dibbed (claimed)  ·  Dark = unclaimed.' },
+            ],
+            tip: 'You can only unclaim a pit you dibbed yourself. Leads can reassign from the dashboard.',
+          }} />
+        </div>
         <div className="flex gap-2">
           <Badge variant="default">{scouted}/{total} done</Badge>
           {dibbed > 0 && <Badge variant="amber">{dibbed} claimed</Badge>}

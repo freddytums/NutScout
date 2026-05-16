@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import {
   LogOut, RefreshCw, CheckCircle2, AlertCircle, Key, Users, ShieldAlert,
   FlaskConical, Lock, Unlock, Archive, ArchiveRestore, Plus, Globe, Shield,
@@ -578,7 +579,7 @@ export function Settings() {
   return (
     <div className="flex flex-col h-full">
       {/* Tab bar */}
-      <div className="flex border-b border-[hsl(var(--border))] bg-[hsl(var(--primary))] shrink-0 px-2">
+      <div className="flex border-b border-[hsl(var(--border))] bg-[hsl(var(--primary))] shrink-0 px-2 items-center">
         {(['general', ...(isAdmin ? ['admin'] : [])] as SettingsTab[]).map((t) => (
           <button
             key={t}
@@ -595,6 +596,17 @@ export function Settings() {
             {t === 'general' ? 'General' : 'Admin'}
           </button>
         ))}
+        <div className="ml-auto pr-1">
+          <HelpButton content={{
+            title: 'Settings',
+            description: 'Manage your account, choose your active event, and (admins) configure the app for your whole team.',
+            steps: [
+              { heading: 'General tab', detail: 'Switch season and event. Your selection is saved locally on this device and doesn\'t affect other scouts.' },
+              { heading: 'Admin tab', detail: 'Set the global default event/season for new users, add or archive events via TBA sync, lock events to read-only, manage the TBA API key, and seed demo data.' },
+            ],
+            tip: 'Switching events reloads all scouting data — match entries, pits, and schedule — for the selected event.',
+          }} />
+        </div>
       </div>
 
       {/* Content */}

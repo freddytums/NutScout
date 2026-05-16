@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { NutronsCelebrationOverlay } from '@/components/CelebrationOverlay';
@@ -78,7 +79,21 @@ export function PitScouting() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>Pit Scouting — {game.name} {game.year}</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Pit Scouting — {game.name} {game.year}</CardTitle>
+            <HelpButton content={{
+              title: 'Pit Scouting',
+              description: 'Record a robot\'s design and capabilities during a pit visit. Fill this out while talking to the team.',
+              steps: [
+                { heading: 'Enter team number', detail: 'Type the team number at the top, or navigate here from the Pit Map after dibbing.' },
+                { heading: 'Fill in the fields', detail: 'Drivetrain, mechanisms, auto routines, climb capability, and overall impression.' },
+                { heading: 'Submit', detail: 'Saves permanently. The Pit Map will show this robot as scouted (green).' },
+              ],
+              tip: 'Dib the pit on the Pit Map first so nobody else scouts the same robot at the same time.',
+            }} />
+          </div>
+        </CardHeader>
         <CardContent>
           <FormRenderer fields={game.pit} values={values} onChange={handleChange} />
         </CardContent>

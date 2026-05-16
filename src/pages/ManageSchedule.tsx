@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { HelpButton } from '@/components/ui/HelpButton';
 import type React from 'react';
 import {
   Clock, Bell, CheckCircle2, AlertCircle, RefreshCw, AlertTriangle, Zap,
@@ -484,6 +485,22 @@ export function ManageSchedule() {
   return (
     <>
       <div className="p-4 flex flex-col gap-4 max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Schedule</h2>
+          <HelpButton content={{
+            title: 'Schedule',
+            description: 'Generate and manage the scouting schedule — which scout covers which robot in every match.',
+            steps: [
+              { heading: 'Generate tab', detail: 'Pick a rotation method (e.g. Rotate-3, Snake) and click Generate. All primary scouts are notified automatically.' },
+              { heading: 'Schedule tab', detail: 'Full match-by-match grid. Each cell shows the scout assigned to that alliance station.' },
+              { heading: 'Slot colors', detail: 'Green = submitted · Amber = missed (match played, no entry) · White = upcoming · Gray = unassigned.' },
+              { heading: 'Reassign a slot', detail: 'Go to Lead Dashboard → Missing Coverage and use the Assign button on any missed slot.' },
+            ],
+            tip: 'Only scouts marked as Primary appear in the schedule. Set primary status in User Management.',
+          }} />
+        </div>
+
         {/* Sub-tabs */}
         <div className="flex rounded-lg border border-[hsl(var(--border))] overflow-hidden shrink-0">
           {tabs.map((t) => (
