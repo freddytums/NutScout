@@ -380,15 +380,14 @@ export function PitMap() {
                         Release
                       </Button>
                     )}
-                    {isMyDib && (
-                      <Button
-                        onClick={() => navigate(`/pit?team=${selected.teamNumber}`)}
-                        size="sm"
-                        className="flex-1 gap-2"
-                      >
-                        <ClipboardList size={14} /> Scout Now
-                      </Button>
-                    )}
+                    <Button
+                      onClick={() => navigate(`/pit?team=${selected.teamNumber}`)}
+                      size="sm"
+                      variant={isMyDib ? 'default' : 'secondary'}
+                      className="flex-1 gap-2"
+                    >
+                      <ClipboardList size={14} /> {isMyDib ? 'Scout Now' : 'Scout Anyway'}
+                    </Button>
                     {isLead && (
                       <Button
                         variant="secondary"

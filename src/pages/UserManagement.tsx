@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Search, ChevronDown, Star, StarOff } from 'lucide-react';
+import { Search, ChevronDown, Star, StarOff, Trash2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useSchedule } from '@/hooks/useSchedule';
-import { updateUserProfile } from '@/lib/firestore';
+import { useAuth } from '@/hooks/useAuth';
+import { updateUserProfile, deleteUserAccount, deleteUserAccountsBatch } from '@/lib/firestore';
 import { cn } from '@/lib/utils';
 import type { AppUser, UserRole } from '@/types/scout';
 
@@ -71,13 +73,17 @@ function RolePicker({ current, onSelect }: {
   );
 }
 
-function UserRow({ user, onRoleChange, onPrimaryToggle, updating }: {
+function UserRow({ user, onRoleChange, onPrimaryToggle, onDelete, updating, isAdmin, isSelf }: {
   user: AppUser;
   onRoleChange: (uid: string, role: UserRole) => void;
   onPrimaryToggle: (uid: string, current: boolean) => void;
+  onDelete: (uid: string) => void;
   updating: string | null;
+  isAdmin: boolean;
+  isSelf: boolean;
 }) {
   const isUpdating = updating === user.uid;
+  const [confirming, setConfirming] = useState(false);
 
   return (
     <div className={cn(
@@ -100,6 +106,7 @@ function UserRow({ user, onRoleChange, onPrimaryToggle, updating }: {
           {user.isPrimaryScout && (
             <Star size={11} className="text-[hsl(var(--accent))] shrink-0" fill="currentColor" />
           )}
+          {isSelf && <span className="text-[10px] text-[hsl(var(--muted-foreground))]">(you)</span>}
         </div>
         <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">{user.email}</div>
         {(user.teamKey || user.teamName) && (
@@ -134,6 +141,26 @@ function UserRow({ user, onRoleChange, onPrimaryToggle, updating }: {
           current={user.role}
           onSelect={(role) => onRoleChange(user.uid, role)}
         />
+
+        {isAdmin && !isSelf && (
+          confirming ? (
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => { onDelete(user.uid); setConfirming(false); }}
+                className="text-[9px] px-1.5 py-0.5 rounded bg-[hsl(var(--destructive))] text-white font-semibold cursor-pointer">
+                Del
+              </button>
+              <button type="button" onClick={() => setConfirming(false)}
+                className="text-[hsl(var(--muted-foreground))] cursor-pointer">
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setConfirming(true)} disabled={isUpdating}
+              className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))] transition-colors cursor-pointer disabled:pointer-events-none">
+              <Trash2 size={14} />
+            </button>
+          )
+        )}
       </div>
     </div>
   );
@@ -141,9 +168,15 @@ function UserRow({ user, onRoleChange, onPrimaryToggle, updating }: {
 
 export function UserManagement() {
   const { users, loading } = useSchedule();
+  const { user: currentUser } = useAuth();
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'all'>('all');
   const [updating, setUpdating] = useState<string | null>(null);
+  const [clearingDemo, setClearingDemo] = useState(false);
+  const [confirmClearDemo, setConfirmClearDemo] = useState(false);
+
+  const isAdmin = currentUser?.role === 'admin';
+  const demoScouts = users.filter((u) => u.uid.startsWith('demo-'));
 
   async function handleRoleChange(uid: string, role: UserRole) {
     setUpdating(uid);
@@ -160,6 +193,25 @@ export function UserManagement() {
       await updateUserProfile(uid, { isPrimaryScout: !current });
     } finally {
       setUpdating(null);
+    }
+  }
+
+  async function handleDelete(uid: string) {
+    setUpdating(uid);
+    try {
+      await deleteUserAccount(uid);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  async function handleClearDemoScouts() {
+    setClearingDemo(true);
+    try {
+      await deleteUserAccountsBatch(demoScouts.map((u) => u.uid));
+    } finally {
+      setClearingDemo(false);
+      setConfirmClearDemo(false);
     }
   }
 
@@ -256,7 +308,10 @@ export function UserManagement() {
                 user={user}
                 onRoleChange={handleRoleChange}
                 onPrimaryToggle={handlePrimaryToggle}
+                onDelete={handleDelete}
                 updating={updating}
+                isAdmin={isAdmin}
+                isSelf={user.uid === currentUser?.uid}
               />
             ))
           )}
@@ -267,6 +322,30 @@ export function UserManagement() {
         <Star size={10} className="inline mr-1" fill="currentColor" />
         Primary scouts appear in the auto-scheduler. Role changes take effect immediately.
       </p>
+
+      {isAdmin && demoScouts.length > 0 && (
+        <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.3)] p-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Demo scouts</p>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">{demoScouts.length} demo account{demoScouts.length !== 1 ? 's' : ''} in the system</p>
+          </div>
+          {confirmClearDemo ? (
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="destructive" loading={clearingDemo} onClick={handleClearDemoScouts}>
+                Remove all
+              </Button>
+              <button type="button" onClick={() => setConfirmClearDemo(false)}
+                className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={() => setConfirmClearDemo(true)}>
+              <Trash2 size={13} className="mr-1.5" /> Remove Demo Scouts
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

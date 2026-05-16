@@ -212,12 +212,17 @@ function CoverageMatrix({ matches }: { matches: MatchEntry[] }) {
                   {(['red','blue'] as const).map((alliance) =>
                     ([1,2,3] as const).map((pos) => {
                       const e = entries.find((x) => x.alliance === alliance && x.alliancePosition === pos);
+                      const isFlagged = e && !!(e.flags?.needsRescount || e.flags?.outlier || e.flags?.duplicate);
                       return (
                         <div key={`${alliance}-${pos}`}
+                          title={isFlagged ? '⚠ Flagged — data needs review' : undefined}
                           className={cn('py-1.5 text-[9px] font-data text-center',
-                            e ? 'bg-[hsl(142,60%,42%,0.12)] text-[hsl(142,60%,42%)]' : 'text-[hsl(var(--muted-foreground)/0.3)]'
+                            isFlagged
+                              ? 'bg-amber-500/25 text-amber-200'
+                              : e ? 'bg-[hsl(142,60%,42%,0.12)] text-[hsl(142,60%,42%)]'
+                              : 'text-[hsl(var(--muted-foreground)/0.3)]'
                           )}>
-                          {e ? e.teamNumber : '·'}
+                          {isFlagged ? '⚠' : e ? e.teamNumber : '·'}
                         </div>
                       );
                     })
@@ -274,20 +279,28 @@ function CoverageMatrix({ matches }: { matches: MatchEntry[] }) {
                     const entry = entryMap.get(`${match.match_number}-${alliance}-${pos}`);
                     const teamKey = match.alliances[alliance].team_keys[pos - 1];
                     const expected = teamKey ? teamNumberFromKey(teamKey) : null;
+                    const isFlagged = entry && !!(entry.flags?.needsRescount || entry.flags?.outlier || entry.flags?.duplicate);
                     return (
                       <div
                         key={`${alliance}-${pos}`}
-                        title={entry ? `Scouted by ${entry.scoutedByName}` : played ? `Missing — expected ${expected ?? '?'}` : ''}
+                        title={
+                          isFlagged ? `⚠ Flagged — scouted by ${entry.scoutedByName}`
+                          : entry ? `Scouted by ${entry.scoutedByName}`
+                          : played ? `Missing — expected ${expected ?? '?'}`
+                          : ''
+                        }
                         className={cn(
                           'py-1.5 text-[9px] font-data text-center cursor-default',
-                          entry
+                          isFlagged
+                            ? 'bg-amber-500/25 text-amber-200'
+                            : entry
                             ? 'bg-[hsl(142,60%,42%,0.12)] text-[hsl(142,60%,42%)]'
                             : played
                             ? 'bg-[hsl(var(--destructive)/0.08)] text-[hsl(var(--destructive))]'
                             : 'text-[hsl(var(--muted-foreground)/0.3)]'
                         )}
                       >
-                        {entry ? (expected ?? entry.teamNumber) : played ? '!' : '·'}
+                        {isFlagged ? '⚠' : entry ? (expected ?? entry.teamNumber) : played ? '!' : '·'}
                       </div>
                     );
                   })
@@ -299,6 +312,7 @@ function CoverageMatrix({ matches }: { matches: MatchEntry[] }) {
       </div>
       <div className="flex gap-4 text-[10px] text-[hsl(var(--muted-foreground))] flex-wrap">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[hsl(142,60%,42%,0.3)] inline-block" /> Scouted</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-500/30 inline-block" /> Flagged</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[hsl(var(--destructive)/0.2)] inline-block" /> Missed</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[hsl(var(--muted))] inline-block" /> Upcoming</span>
       </div>
@@ -363,18 +377,23 @@ function ScoutLog({ matches }: { matches: MatchEntry[] }) {
                 <div className="flex flex-wrap gap-1">
                   {[...entries]
                     .sort((a, b) => a.matchNumber - b.matchNumber)
-                    .map((e) => (
-                      <span
-                        key={e.id}
-                        className={cn(
-                          'text-[9px] font-data px-1.5 py-0.5 rounded font-semibold',
-                          e.alliance === 'red' ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/15 text-blue-400'
-                        )}
-                        title={`Q${e.matchNumber} · Team ${e.teamNumber} · ${e.alliance === 'red' ? 'R' : 'B'}${e.alliancePosition}`}
-                      >
-                        Q{e.matchNumber}
-                      </span>
-                    ))}
+                    .map((e) => {
+                      const isFlagged = !!(e.flags?.needsRescount || e.flags?.outlier || e.flags?.duplicate);
+                      return (
+                        <span
+                          key={e.id}
+                          className={cn(
+                            'text-[9px] font-data px-1.5 py-0.5 rounded font-semibold',
+                            isFlagged
+                              ? 'bg-amber-500/25 text-amber-200 ring-1 ring-amber-500/50'
+                              : e.alliance === 'red' ? 'bg-red-500/15 text-red-400' : 'bg-blue-500/15 text-blue-400'
+                          )}
+                          title={`Q${e.matchNumber} · Team ${e.teamNumber} · ${e.alliance === 'red' ? 'R' : 'B'}${e.alliancePosition}${isFlagged ? ' · ⚠ Flagged' : ''}`}
+                        >
+                          {isFlagged ? `⚠Q${e.matchNumber}` : `Q${e.matchNumber}`}
+                        </span>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -635,7 +654,7 @@ export function LeadDashboard() {
 
   const allMatchFields = useMemo(() => {
     try {
-      const config = getGameConfig(currentEvent?.activeGameYear ?? 2026);
+      const config = getGameConfig(currentEvent?.activeGameYear ?? 2025);
       return [...config.match.auto, ...config.match.teleop];
     } catch {
       return [];

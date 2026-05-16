@@ -74,6 +74,28 @@
   }
 }
 
+/* ── Counter score-pop animations ───────────────────────────────────────── */
+@keyframes score-pop {
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1.6); }
+  18%  { opacity: 1; transform: translateX(-50%) translateY(-10px) scale(1.1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-68px) scale(0.7); }
+}
+.score-pop {
+  pointer-events: none;
+  text-shadow: 0 0 12px hsl(142 71% 45% / 0.8), 0 0 4px hsl(142 71% 45% / 0.5);
+  animation: score-pop 0.65s cubic-bezier(0.15, 0.6, 0.3, 1) forwards;
+}
+@keyframes score-pop-neg {
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0)   scale(1.6); }
+  18%  { opacity: 1; transform: translateX(-50%) translateY(10px) scale(1.1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(64px) scale(0.7); }
+}
+.score-pop-neg {
+  pointer-events: none;
+  text-shadow: 0 0 12px hsl(0 84% 60% / 0.8), 0 0 4px hsl(0 84% 60% / 0.5);
+  animation: score-pop-neg 0.65s cubic-bezier(0.15, 0.6, 0.3, 1) forwards;
+}
+
 /* ── Flagged-entry glow ──────────────────────────────────────────────────── */
 @keyframes flag-glow {
   0%, 100% {

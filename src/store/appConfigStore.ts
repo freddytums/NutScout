@@ -3,8 +3,10 @@ import { create } from 'zustand';
 export interface AppConfig {
   tbaKey: string;
   tbaKeyStale: boolean;
-  adminName: string;   // shown in "contact X" banner
+  adminName: string;
   adminEmail: string;
+  defaultEventId: string;      // global default event for new users
+  defaultGameYear: number;     // global default game year
 }
 
 const DEFAULTS: AppConfig = {
@@ -12,6 +14,8 @@ const DEFAULTS: AppConfig = {
   tbaKeyStale: false,
   adminName: 'James Barnes',
   adminEmail: 'jamesabarnes3216@gmail.com',
+  defaultEventId: '',
+  defaultGameYear: 2026,
 };
 
 interface AppConfigState {

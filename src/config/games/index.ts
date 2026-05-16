@@ -1,7 +1,9 @@
 import type { GameConfig } from '@/types/game';
+import game2025 from './2025';
 import game2026 from './2026';
 
 const games: Record<number, GameConfig> = {
+  2025: game2025,
   2026: game2026,
 };
 

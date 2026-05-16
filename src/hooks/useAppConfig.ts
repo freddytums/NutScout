@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
-import { subscribeToAppConfig, appConfigDoc } from '@/lib/firestore';
+import { subscribeToAppConfig, appConfigDoc, setGlobalDefaults as fsSetGlobalDefaults } from '@/lib/firestore';
 import { useAppConfigStore } from '@/store/appConfigStore';
 import { useAuth } from '@/hooks/useAuth';
 import { updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { doc } from 'firebase/firestore';
+
+export { fsSetGlobalDefaults as setGlobalDefaults };
 
 /** Call once at app root — syncs Firestore config/app into the Zustand store */
 export function useAppConfigSync() {
@@ -17,6 +19,8 @@ export function useAppConfigSync() {
         tbaKeyStale: (data.tbaKeyStale as boolean) ?? false,
         adminName: (data.adminName as string) ?? 'James Barnes',
         adminEmail: (data.adminEmail as string) ?? 'jamesabarnes3216@gmail.com',
+        defaultEventId: (data.defaultEventId as string) ?? '',
+        defaultGameYear: (data.defaultGameYear as number) ?? 2025,
       });
     });
   }, [setConfig]);

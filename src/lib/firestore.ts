@@ -11,6 +11,8 @@ import {
   Timestamp,
   serverTimestamp,
   getDocs,
+  writeBatch,
+  deleteField,
   type QueryConstraint,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -122,6 +124,20 @@ export async function deleteMatch(eventId: string, matchId: string) {
   await deleteDoc(doc(matchesCol(eventId), matchId));
 }
 
+export async function deleteAllMatches(eventId: string) {
+  const snap = await getDocs(matchesCol(eventId));
+  // Firestore batch limit is 500; chunk if needed
+  const chunks: typeof snap.docs[] = [];
+  for (let i = 0; i < snap.docs.length; i += 490) {
+    chunks.push(snap.docs.slice(i, i + 490));
+  }
+  await Promise.all(chunks.map((chunk) => {
+    const batch = writeBatch(db);
+    chunk.forEach((d) => batch.delete(d.ref));
+    return batch.commit();
+  }));
+}
+
 export async function updateMatchData(
   eventId: string,
   matchId: string,
@@ -139,6 +155,35 @@ export async function updatePitEntry(
   updates: Partial<Pick<PitEntry, 'status' | 'data'>>
 ) {
   await updateDoc(doc(pitsCol(eventId), String(teamNumber)), updates);
+}
+
+export async function resetPit(eventId: string, teamNumber: number) {
+  await updateDoc(doc(pitsCol(eventId), String(teamNumber)), {
+    status: 'unclaimed',
+    data: deleteField(),
+    scoutedBy: deleteField(),
+    scoutedAt: deleteField(),
+    dibbedBy: deleteField(),
+    dibbedByName: deleteField(),
+    dibbedAt: deleteField(),
+  });
+}
+
+export async function resetAllPits(eventId: string) {
+  const snap = await getDocs(pitsCol(eventId));
+  const batch = writeBatch(db);
+  snap.docs.forEach((d) => {
+    batch.update(d.ref, {
+      status: 'unclaimed',
+      data: deleteField(),
+      scoutedBy: deleteField(),
+      scoutedAt: deleteField(),
+      dibbedBy: deleteField(),
+      dibbedByName: deleteField(),
+      dibbedAt: deleteField(),
+    });
+  });
+  await batch.commit();
 }
 
 // ─── Data Quality Queries ────────────────────────────────────────────────────
@@ -189,6 +234,17 @@ export function subscribeToAllUsers(cb: (users: AppUser[]) => void) {
   return onSnapshot(usersCol(), (snap) => {
     cb(snap.docs.map((d) => d.data() as AppUser));
   });
+}
+
+export async function deleteUserAccount(uid: string) {
+  await deleteDoc(doc(usersCol(), uid));
+}
+
+export async function deleteUserAccountsBatch(uids: string[]) {
+  if (uids.length === 0) return;
+  const batch = writeBatch(db);
+  uids.forEach((uid) => batch.delete(doc(usersCol(), uid)));
+  await batch.commit();
 }
 
 export async function updateUserProfile(
@@ -269,4 +325,27 @@ export function subscribeToAppConfig(cb: (cfg: Record<string, unknown>) => void)
   return onSnapshot(appConfigDoc(), (snap) => {
     cb(snap.exists() ? snap.data() as Record<string, unknown> : {});
   });
+}
+
+export async function setGlobalDefaults(updates: { defaultEventId?: string; defaultGameYear?: number }) {
+  try {
+    await updateDoc(appConfigDoc(), updates);
+  } catch {
+    await setDoc(appConfigDoc(), updates, { merge: true });
+  }
+}
+
+// ─── All events ──────────────────────────────────────────────────────────────
+
+export function subscribeToAllEvents(cb: (events: import('@/types/scout').EventConfig[]) => void) {
+  return onSnapshot(eventsCol(), (snap) => {
+    cb(snap.docs.map((d) => d.data() as import('@/types/scout').EventConfig));
+  });
+}
+
+export async function updateEventConfig(
+  eventId: string,
+  updates: Partial<import('@/types/scout').EventConfig>
+) {
+  await updateDoc(doc(eventsCol(), eventId), updates);
 }

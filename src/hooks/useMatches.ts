@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { subscribeToAllMatches, submitMatch, flagMatch, deleteMatch, updateMatchData } from '@/lib/firestore';
+import { subscribeToAllMatches, submitMatch, flagMatch, deleteMatch, deleteAllMatches, updateMatchData } from '@/lib/firestore';
 import { useEventStore } from '@/store/eventStore';
 import { useAuth } from './useAuth';
 import type { MatchEntry } from '@/types/scout';
@@ -54,10 +54,15 @@ export function useMatches() {
     await deleteMatch(currentEventId, matchId);
   }
 
+  async function deleteAll() {
+    if (!currentEventId) return;
+    await deleteAllMatches(currentEventId);
+  }
+
   async function updateEntry(matchId: string, data: Record<string, unknown>, notes?: string) {
     if (!currentEventId) return;
     await updateMatchData(currentEventId, matchId, data, notes);
   }
 
-  return { matches, loading, submit, flag, deleteEntry, updateEntry };
+  return { matches, loading, submit, flag, deleteEntry, deleteAll, updateEntry };
 }

@@ -161,8 +161,9 @@ export function MatchScouting() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showMatchPicker, setShowMatchPicker] = useState(false);
 
-  const gameYear = currentEvent?.activeGameYear ?? 2026;
+  const gameYear = currentEvent?.activeGameYear ?? 2025;
   const game = getGameConfig(gameYear);
+  const isEventLocked = !!(currentEvent?.locked) && user?.role !== 'admin';
 
   const hasTBASchedule = tbaMatches.length > 0;
 
@@ -539,6 +540,12 @@ export function MatchScouting() {
         </div>
       )}
 
+      {isEventLocked && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/08 px-3 py-2.5 flex items-center gap-2 text-sm text-amber-300">
+          <span className="text-base">🔒</span> This event is locked — submissions are disabled. Contact your lead or admin.
+        </div>
+      )}
+
       {/* Navigation */}
       <div className="flex gap-3">
         {stepIndex > 0 && (
@@ -555,7 +562,7 @@ export function MatchScouting() {
             Next <ChevronRight size={16} />
           </Button>
         ) : (
-          <Button onClick={handleSubmit} loading={submitting} className="flex-1">
+          <Button onClick={handleSubmit} loading={submitting} disabled={isEventLocked} className="flex-1">
             Submit Match
           </Button>
         )}

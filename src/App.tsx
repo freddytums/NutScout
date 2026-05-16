@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useAuthInit, useAuth } from '@/hooks/useAuth';
 import { useAppConfigSync } from '@/hooks/useAppConfig';
+import { useCurrentEventSync, useDefaultEvent } from '@/hooks/useCurrentEventSync';
 import { AppShell } from '@/components/layout/AppShell';
 import { Login } from '@/pages/Login';
 
@@ -50,6 +51,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 function App() {
   useAuthInit();
   useAppConfigSync();
+  useCurrentEventSync();
+  useDefaultEvent();
 
   return (
     <BrowserRouter basename="/NutScout">

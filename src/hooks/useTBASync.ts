@@ -8,6 +8,7 @@ import {
   calcGridDimensions,
   sortMatches,
 } from '@/lib/tba';
+import { getAvailableYears } from '@/config/games';
 import { useTBAStore } from '@/store/tbaStore';
 import { useEventStore } from '@/store/eventStore';
 import type { EventConfig } from '@/types/scout';
@@ -26,32 +27,31 @@ export function useTBASync() {
     setError(null);
 
     try {
-      // Fetch from TBA in parallel
       const [tbaEvent, teams, matches] = await Promise.all([
         getEvent(eventKey),
         getEventTeams(eventKey),
         getEventMatches(eventKey),
       ]);
 
-      // Cache in TBA store
       setTBAData(tbaEvent, teams, sortMatches(matches));
-
       setStatus('writing');
 
-      // Build pit layout from sorted team list
+      // Auto-detect: use TBA event year if we have a config for it,
+      // otherwise fall back to the latest available game year.
+      const availableYears = getAvailableYears(); // sorted newest-first
+      const activeGameYear = availableYears.includes(tbaEvent.year)
+        ? tbaEvent.year
+        : availableYears[0];
+
       const sortedTeams = [...teams].sort((a, b) => a.team_number - b.team_number);
       const { rows, cols } = calcGridDimensions(sortedTeams.length);
 
-      const rowLabels = Array.from({ length: rows }, (_, i) =>
-        String.fromCharCode(65 + i)
-      );
+      const rowLabels = Array.from({ length: rows }, (_, i) => String.fromCharCode(65 + i));
       const colLabels = Array.from({ length: cols }, (_, i) => String(i + 1));
 
       const teamAssignments: Record<string, number> = {};
       sortedTeams.forEach((team, idx) => {
-        const row = Math.floor(idx / cols);
-        const col = idx % cols;
-        teamAssignments[`${row}-${col}`] = team.team_number;
+        teamAssignments[`${Math.floor(idx / cols)}-${idx % cols}`] = team.team_number;
       });
 
       const eventConfig: EventConfig = {
@@ -61,31 +61,27 @@ export function useTBASync() {
         eventKey,
         pitLayout: { rows, cols, rowLabels, colLabels },
         teamAssignments,
-        activeGameYear: tbaEvent.year,
+        activeGameYear,
       };
 
-      // Write event doc
       await setDoc(doc(db, 'events', eventKey), eventConfig);
 
-      // Batch-write pit entries (Firestore max 500 per batch)
       const BATCH_SIZE = 400;
       for (let i = 0; i < sortedTeams.length; i += BATCH_SIZE) {
         const batch = writeBatch(db);
         sortedTeams.slice(i, i + BATCH_SIZE).forEach((team, localIdx) => {
-          const globalIdx = i + localIdx;
-          const row = Math.floor(globalIdx / cols);
-          const col = globalIdx % cols;
+          const idx = i + localIdx;
           batch.set(
             doc(db, 'events', eventKey, 'pits', String(team.team_number)),
             {
               teamNumber: team.team_number,
               teamName: team.nickname,
-              row,
-              col,
+              row: Math.floor(idx / cols),
+              col: idx % cols,
               status: 'unclaimed',
               createdAt: Timestamp.now(),
             },
-            { merge: true } // don't overwrite existing scouting data on re-sync
+            { merge: true }
           );
         });
         await batch.commit();

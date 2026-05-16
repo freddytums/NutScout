@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Trophy, Flame, Target } from 'lucide-react';
+import { Trophy, Flame } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useMatches } from '@/hooks/useMatches';
@@ -36,21 +36,10 @@ export function Leaderboard() {
       });
     });
 
-    // Count matches per scout
+    // Count matches per scout — only for users that still have an account
     matches.forEach((m) => {
       const existing = byUid.get(m.scoutedBy);
-      if (existing) {
-        existing.matchCount++;
-      } else {
-        byUid.set(m.scoutedBy, {
-          uid: m.scoutedBy,
-          name: m.scoutedByName,
-          matchCount: 1,
-          streak: 0,
-          accuracy: 100,
-          isPrimary: false,
-        });
-      }
+      if (existing) existing.matchCount++;
     });
 
     // Calculate accuracy (% of matches without error flags)
@@ -141,30 +130,19 @@ export function Leaderboard() {
                       <Badge variant="default" className="text-[10px] shrink-0">primary</Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-xs text-[hsl(var(--muted-foreground))] font-data">
-                      {scout.matchCount} matches
+                  {scout.streak > 2 && (
+                    <span className="flex items-center gap-0.5 text-xs text-amber-400 mt-0.5">
+                      <Flame size={11} /> {scout.streak} streak
                     </span>
-                    {scout.streak > 2 && (
-                      <span className="flex items-center gap-0.5 text-xs text-amber-400">
-                        <Flame size={11} /> {scout.streak}
-                      </span>
-                    )}
-                  </div>
+                  )}
                 </div>
 
-                {/* Accuracy */}
+                {/* Match count */}
                 <div className="flex flex-col items-center shrink-0">
-                  <div className="flex items-center gap-1">
-                    <Target size={12} className={scout.accuracy >= 90 ? 'text-[hsl(var(--accent))]' : 'text-amber-400'} />
-                    <span className={cn(
-                      'font-data text-sm font-bold',
-                      scout.accuracy >= 90 ? 'text-[hsl(var(--accent))]' : 'text-amber-400'
-                    )}>
-                      {scout.accuracy}%
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[hsl(var(--muted-foreground))]">accuracy</span>
+                  <span className="font-data text-lg font-bold text-[hsl(var(--foreground))]">
+                    {scout.matchCount}
+                  </span>
+                  <span className="text-[10px] text-[hsl(var(--muted-foreground))]">matches</span>
                 </div>
               </CardContent>
             </Card>

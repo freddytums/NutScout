@@ -69,6 +69,9 @@ service cloud.firestore {
 
       // Lead/admin can update anyone (role promotions, team assignments)
       allow update: if isLead();
+
+      // Only admins can delete user documents
+      allow delete: if isAdmin();
     }
 
     // ── Events ───────────────────────────────────────────────────────

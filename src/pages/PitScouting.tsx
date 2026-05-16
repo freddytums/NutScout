@@ -14,7 +14,7 @@ export function PitScouting() {
   const { currentEvent } = useEventStore();
   const { submitPit } = usePits();
 
-  const gameYear = currentEvent?.activeGameYear ?? 2026;
+  const gameYear = currentEvent?.activeGameYear ?? 2025;
   const game = getGameConfig(gameYear);
 
   const [teamNumber, setTeamNumber] = useState(params.get('team') ?? '');

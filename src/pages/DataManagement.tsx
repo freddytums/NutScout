@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, ChevronDown, AlertTriangle,
   CalendarOff, Loader2, Trash2, X, ArrowUpDown, ArrowUp, ArrowDown,
-  Download, Crosshair, RotateCcw, Pencil, Check, ShieldAlert,
+  Download, Crosshair, RotateCcw, Pencil, Check, ShieldAlert, Route,
 } from 'lucide-react';
 import { useMatches } from '@/hooks/useMatches';
 import { usePits } from '@/hooks/usePits';
@@ -15,20 +15,32 @@ import { getGameConfig } from '@/config/games';
 import { findOutliers } from '@/lib/dataQuality';
 import type { MatchEntry } from '@/types/scout';
 import type { GameField } from '@/types/game';
+import type { PathSegment } from '@/components/scouting/fields/PathTracerField';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const ENDGAME_PTS: Record<string, number> = { 'Deep Cage': 15, 'Shallow Cage': 6, 'Park': 2, 'None': 0 };
+// Per-year endgame select scoring (field id → option label → points)
+const ENDGAME_SELECT: Record<number, { fieldId: string; pts: Record<string, number> }> = {
+  2025: {
+    fieldId: 'endgame_climb',
+    pts: { 'Deep Cage': 15, 'Shallow Cage': 6, 'Park': 2, 'None': 0 },
+  },
+  2026: {
+    fieldId: 'endgame_tower_level',
+    pts: { 'Level 3': 30, 'Level 2': 20, 'Level 1': 10, 'None': 0 },
+  },
+};
 
-function scorePts(entry: MatchEntry, fields: GameField[]): { auto: number; teleop: number; endgame: number; total: number } {
+function scorePts(entry: MatchEntry, fields: GameField[], year = 2025): { auto: number; teleop: number; endgame: number; total: number } {
+  const eg = ENDGAME_SELECT[year] ?? ENDGAME_SELECT[2025];
   let auto = 0, teleop = 0, endgame = 0;
   for (const f of fields) {
     if (!f.pointsPerUnit) continue;
     const d = entry.data;
     const pts = f.type === 'counter' ? ((d[f.id] as number || 0) * f.pointsPerUnit)
       : f.type === 'toggle' ? ((d[f.id] ? 1 : 0) * f.pointsPerUnit)
-      : f.type === 'select' && f.id === 'endgame_climb' ? (ENDGAME_PTS[d[f.id] as string] ?? 0)
+      : f.type === 'select' && f.id === eg.fieldId ? (eg.pts[d[f.id] as string] ?? 0)
       : 0;
     if (f.section === 'auto') auto += pts;
     else if (f.section === 'teleop') teleop += pts;
@@ -175,35 +187,39 @@ function FieldEditor({
 
 type RawSortCol = 'match' | 'team' | 'alliance' | 'scout' | 'auto' | 'teleop' | 'endgame' | 'total';
 
-function RawEntriesView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
+function RawEntriesView({ matches, allFields, outlierTooltips, gameYear = 2025, initialTeam = '' }: {
   matches: MatchEntry[];
   allFields: GameField[];
   outlierTooltips: Map<string, string>;
+  gameYear?: number;
   initialTeam?: string;
 }) {
   const { user } = useAuth();
-  const { deleteEntry, updateEntry } = useMatches();
-  const isLead = user?.role === 'lead' || user?.role === 'admin';
+  const { deleteEntry, deleteAll, updateEntry } = useMatches();
+  const isLead  = user?.role === 'lead' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
-  const [teamFilter, setTeamFilter]     = useState(initialTeam);
-  const [matchFrom, setMatchFrom]       = useState('');
-  const [matchTo, setMatchTo]           = useState('');
-  const [allianceFilter, setAlliance]   = useState<'all' | 'red' | 'blue'>('all');
-  const [scoutFilter, setScoutFilter]   = useState('');
-  const [flaggedOnly, setFlaggedOnly]   = useState(false);
-  const [showFilters, setShowFilters]   = useState(false);
-  const [sortCol, setSortCol]           = useState<RawSortCol>('match');
-  const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('asc');
-  const [confirming, setConfirming]     = useState<string | null>(null);
-  const [deleting, setDeleting]         = useState<string | null>(null);
-  const [editingId, setEditingId]       = useState<string | null>(null);
-  const [editData, setEditData]         = useState<Record<string, unknown>>({});
-  const [editNotes, setEditNotes]       = useState('');
-  const [saving, setSaving]             = useState(false);
+  const [teamFilter, setTeamFilter]         = useState(initialTeam);
+  const [matchFrom, setMatchFrom]           = useState('');
+  const [matchTo, setMatchTo]               = useState('');
+  const [allianceFilter, setAlliance]       = useState<'all' | 'red' | 'blue'>('all');
+  const [scoutFilter, setScoutFilter]       = useState('');
+  const [flaggedOnly, setFlaggedOnly]       = useState(false);
+  const [showFilters, setShowFilters]       = useState(false);
+  const [sortCol, setSortCol]               = useState<RawSortCol>('match');
+  const [sortDir, setSortDir]               = useState<'asc' | 'desc'>('asc');
+  const [confirming, setConfirming]         = useState<string | null>(null);
+  const [deleting, setDeleting]             = useState<string | null>(null);
+  const [editingId, setEditingId]           = useState<string | null>(null);
+  const [editData, setEditData]             = useState<Record<string, unknown>>({});
+  const [editNotes, setEditNotes]           = useState('');
+  const [saving, setSaving]                 = useState(false);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [deletingAll, setDeletingAll]       = useState(false);
 
   const scouts = useMemo(() => [...new Set(matches.map((m) => m.scoutedByName))].sort(), [matches]);
 
-  const scored = useMemo(() => matches.map((m) => ({ ...m, pts: scorePts(m, allFields) })), [matches, allFields]);
+  const scored = useMemo(() => matches.map((m) => ({ ...m, pts: scorePts(m, allFields, gameYear) })), [matches, allFields, gameYear]);
 
   const outlierIds = useMemo(() => new Set(outlierTooltips.keys()), [outlierTooltips]);
 
@@ -258,6 +274,19 @@ function RawEntriesView({ matches, allFields, outlierTooltips, initialTeam = '' 
     }
   }
 
+  async function handleDeleteAll() {
+    setDeletingAll(true);
+    try {
+      await deleteAll();
+      setConfirmDeleteAll(false);
+      setConfirmText('');
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
+  const [confirmText, setConfirmText] = useState('');
+
   function clearFilters() {
     setTeamFilter(''); setMatchFrom(''); setMatchTo(''); setAlliance('all'); setScoutFilter(''); setFlaggedOnly(false);
   }
@@ -275,6 +304,61 @@ function RawEntriesView({ matches, allFields, outlierTooltips, initialTeam = '' 
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Admin: delete all entries */}
+      {isAdmin && matches.length > 0 && (
+        <div className="flex flex-col gap-2 px-3 py-2.5 rounded-xl border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.06)]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <ShieldAlert size={14} className="text-[hsl(var(--destructive))] shrink-0" />
+              <span className="text-xs text-[hsl(var(--destructive))] font-medium">
+                Delete all match entries ({matches.length})
+              </span>
+            </div>
+            {!confirmDeleteAll ? (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAll(true)}
+                className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg border border-[hsl(var(--destructive)/0.45)] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)] cursor-pointer transition-colors shrink-0"
+              >
+                <Trash2 size={10} /> Delete all
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setConfirmDeleteAll(false); setConfirmText(''); }}
+                className="text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors shrink-0"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {confirmDeleteAll && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[11px] text-[hsl(var(--destructive))]">
+                This permanently deletes all {matches.length} entries. Type <span className="font-mono font-bold">DELETE ALL</span> to confirm.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="Type DELETE ALL…"
+                  className="flex-1 h-8 px-2.5 rounded-lg border border-[hsl(var(--destructive)/0.5)] bg-[hsl(var(--muted))] text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[hsl(var(--destructive)/0.6)] placeholder:text-[hsl(var(--muted-foreground))]"
+                />
+                <button
+                  type="button"
+                  onClick={handleDeleteAll}
+                  disabled={confirmText !== 'DELETE ALL' || deletingAll}
+                  className="flex items-center gap-1 h-8 px-3 rounded-lg bg-[hsl(var(--destructive))] text-white text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {deletingAll ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                  {deletingAll ? 'Deleting…' : 'Delete all'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Controls row */}
       <div className="flex gap-2">
         <div className="relative flex-1">
@@ -385,7 +469,7 @@ function RawEntriesView({ matches, allFields, outlierTooltips, initialTeam = '' 
               const isConfirming = confirming === row.id;
 
               return (
-                <div key={row.id} className={cn(isFlagged && 'bg-amber-500/10', deleting === row.id && 'opacity-40 pointer-events-none')}>
+                <div key={row.id} className={cn(isFlagged && 'bg-amber-500/10 flag-glow', deleting === row.id && 'opacity-40 pointer-events-none')}>
                   {/* Summary row */}
                   <div className={cn(
                     'grid items-center px-3 py-2 border-b border-[hsl(var(--border)/0.3)] text-[10px] transition-colors',
@@ -510,14 +594,25 @@ function RawEntriesView({ matches, allFields, outlierTooltips, initialTeam = '' 
 
 // ── Teams view (per-team aggregate) ──────────────────────────────────────────
 
-function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
+function TeamsView({ matches, allFields, outlierTooltips, gameYear = 2025, fieldSrc, initialTeam = '' }: {
   matches: MatchEntry[];
   allFields: GameField[];
   outlierTooltips: Map<string, string>;
+  gameYear?: number;
+  fieldSrc: string;
   initialTeam?: string;
 }) {
   const { matches: tbaMatches } = useTBAStore();
-  const [search, setSearch]   = useState(initialTeam);
+  const [search, setSearch]       = useState(initialTeam);
+  const [shownPaths, setShownPaths] = useState<Set<string>>(new Set());
+
+  function togglePath(id: string) {
+    setShownPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
   const [sortKey, setSortKey] = useState('total');
   const [expanded, setExpanded] = useState<number | null>(
     initialTeam ? parseInt(initialTeam) || null : null
@@ -546,7 +641,7 @@ function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
 
   const teams = useMemo(() => {
     let list = [...byTeam.entries()].map(([team, entries]) => {
-      const scored = entries.map((e) => scorePts(e, allFields));
+      const scored = entries.map((e) => scorePts(e, allFields, gameYear));
       const fieldAvgs = Object.fromEntries(
         numericFields.map((f) => {
           const vals = entries.map((e) => e.data[f.id]).filter((v) => typeof v === 'number') as number[];
@@ -560,7 +655,7 @@ function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
         avgEndgame: avg(scored.map((s) => s.endgame)),
         avgTotal:   avg(scored.map((s) => s.total)),
         fieldAvgs,
-        hasOutlier: entries.some((e) => outlierIds.has(e.id ?? '')),
+        hasFlagged: entries.some((e) => outlierIds.has(e.id ?? '') || !!(e.flags?.needsRescount || e.flags?.outlier || e.flags?.duplicate)),
       };
     });
     if (search) list = list.filter((x) => String(x.team).startsWith(search));
@@ -599,7 +694,7 @@ function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        {teams.map(({ team, entries, avgAuto, avgTeleop, avgEndgame, avgTotal, fieldAvgs, hasOutlier }, rank) => {
+        {teams.map(({ team, entries, avgAuto, avgTeleop, avgEndgame, avgTotal, fieldAvgs, hasFlagged }, rank) => {
           const isOpen = expanded === team;
           const sorted = [...entries].sort((a, b) => a.matchNumber - b.matchNumber);
           const maxTotal = Math.max(...teams.map((t) => t.avgTotal), 1);
@@ -613,7 +708,7 @@ function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] text-[hsl(var(--muted-foreground))]">{entries.length}× matches</span>
-                    {hasOutlier && <AlertTriangle size={10} className="text-amber-400" />}
+                    {hasFlagged && <AlertTriangle size={10} className="text-amber-400" />}
                   </div>
                   <div className="mt-1 h-1 rounded-full bg-[hsl(var(--muted))] overflow-hidden">
                     <div className="h-full rounded-full bg-[hsl(var(--accent)/0.6)]" style={{ width: `${(avgTotal / maxTotal) * 100}%` }} />
@@ -660,25 +755,43 @@ function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">Per match</span>
                     {sorted.map((e) => {
-                      const pts = scorePts(e, allFields);
-                      const isOutlier = outlierIds.has(e.id ?? '');
+                      const pts = scorePts(e, allFields, gameYear);
                       const tip = outlierTooltips.get(e.id ?? '');
+                      const isFlagged = !!tip || !!(e.flags?.needsRescount || e.flags?.outlier || e.flags?.duplicate);
+                      const pathSegs = (e.data['auto_path'] ?? []) as PathSegment[];
+                      const hasPath = pathSegs.length > 0;
+                      const pathOpen = shownPaths.has(e.id ?? '');
                       return (
                         <div key={e.id} className={cn(
-                          'flex items-center gap-2 text-[10px] py-1 px-2 rounded',
-                          isOutlier && 'bg-amber-500/08'
+                          'flex flex-col gap-1 py-1 px-2 rounded',
+                          isFlagged && 'bg-amber-500/10 flag-glow'
                         )}>
-                          <span className="font-data font-bold text-[hsl(var(--muted-foreground))] w-7">Q{e.matchNumber}</span>
-                          <span className={cn('font-data font-semibold w-5', e.alliance === 'red' ? 'text-red-400' : 'text-blue-400')}>
-                            {e.alliance === 'red' ? 'R' : 'B'}{e.alliancePosition}
-                          </span>
-                          <span className="text-[hsl(var(--muted-foreground))] truncate flex-1">{e.scoutedByName.split(' ')[0]}</span>
-                          <span className="font-data">{pts.auto}+{pts.teleop}+{pts.endgame}</span>
-                          <span className={cn('font-data font-bold', isOutlier ? 'text-amber-400' : '')}>={pts.total}</span>
-                          {isOutlier && (
-                            <span title={tip ?? 'Flagged as outlier'} className="cursor-help shrink-0">
-                              <AlertTriangle size={8} className="text-amber-400" />
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <span className={cn('font-data font-bold w-7', isFlagged ? 'text-amber-400' : 'text-[hsl(var(--muted-foreground))]')}>Q{e.matchNumber}</span>
+                            <span className={cn('font-data font-semibold w-5', e.alliance === 'red' ? 'text-red-400' : 'text-blue-400')}>
+                              {e.alliance === 'red' ? 'R' : 'B'}{e.alliancePosition}
                             </span>
+                            <span className="text-[hsl(var(--muted-foreground))] truncate flex-1">{e.scoutedByName.split(' ')[0]}</span>
+                            <span className="font-data">{pts.auto}+{pts.teleop}+{pts.endgame}</span>
+                            <span className={cn('font-data font-bold', isFlagged ? 'text-amber-400' : '')}>={pts.total}</span>
+                            {isFlagged && (
+                              <span title={tip ?? 'Flagged for review'} className="cursor-help shrink-0">
+                                <AlertTriangle size={8} className="text-amber-400" />
+                              </span>
+                            )}
+                            {hasPath && (
+                              <button type="button" onClick={() => togglePath(e.id ?? '')}
+                                title={pathOpen ? 'Hide auto path' : 'Show auto path'}
+                                className={cn('cursor-pointer transition-colors shrink-0',
+                                  pathOpen ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]')}>
+                                <Route size={10} />
+                              </button>
+                            )}
+                          </div>
+                          {hasPath && pathOpen && (
+                            <div className="w-full pt-0.5">
+                              <PathMiniView segments={pathSegs} fieldSrc={fieldSrc} />
+                            </div>
                           )}
                         </div>
                       );
@@ -712,6 +825,44 @@ function TeamsView({ matches, allFields, outlierTooltips, initialTeam = '' }: {
   );
 }
 
+// ── Auto path mini viewer ─────────────────────────────────────────────────────
+
+function PathMiniView({ segments, fieldSrc }: { segments: PathSegment[]; fieldSrc: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const seg of segments) {
+      if (seg.points.length < 2) continue;
+      ctx.beginPath();
+      ctx.strokeStyle = seg.color;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.moveTo(seg.points[0].x * canvas.width, seg.points[0].y * canvas.height);
+      for (let i = 1; i < seg.points.length; i++) {
+        ctx.lineTo(seg.points[i].x * canvas.width, seg.points[i].y * canvas.height);
+      }
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(seg.points[0].x * canvas.width, seg.points[0].y * canvas.height, 4, 0, Math.PI * 2);
+      ctx.fillStyle = seg.color;
+      ctx.fill();
+    }
+  }, [segments]);
+
+  return (
+    <div className="relative rounded overflow-hidden border border-[hsl(var(--border)/0.5)]"
+      style={{ aspectRatio: '54.75/26.33' }}>
+      <img src={fieldSrc} alt="" className="absolute inset-0 w-full h-full object-fill opacity-55" draggable={false} />
+      <canvas ref={canvasRef} width={548} height={264} className="absolute inset-0 w-full h-full" />
+    </div>
+  );
+}
+
 // ── Scatter / Bubble chart ────────────────────────────────────────────────────
 
 const VW = 480, VH = 300;
@@ -729,7 +880,7 @@ function niceStep(range: number, n: number): number {
 
 type ZoomBox = { x0: number; x1: number; y0: number; y1: number };
 
-function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields: GameField[] }) {
+function ScatterView({ matches, allFields, gameYear = 2025 }: { matches: MatchEntry[]; allFields: GameField[]; gameYear?: number }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [xKey, setXKey] = useState('auto');
   const [yKey, setYKey] = useState('total');
@@ -766,7 +917,7 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
       byTeam.get(m.teamNumber)!.push(m);
     });
     return [...byTeam.entries()].map(([team, entries]) => {
-      const scored = entries.map((e) => scorePts(e, allFields));
+      const scored = entries.map((e) => scorePts(e, allFields, gameYear));
       const fAvg: Record<string, number> = {};
       numericFields.forEach((f) => {
         const vals = entries.map((e) => e.data[f.id]).filter((v): v is number => typeof v === 'number');
@@ -1081,15 +1232,19 @@ function ScatterView({ matches, allFields }: { matches: MatchEntry[]; allFields:
 
 function PitsView({ pitFields }: { pitFields: GameField[] }) {
   const { user } = useAuth();
-  const { pits, editPit } = usePits();
-  const isLead = user?.role === 'lead' || user?.role === 'admin';
+  const { pits, editPit, reset: resetPit, resetAll: resetAllPits } = usePits();
+  const isLead  = user?.role === 'lead' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
-  const [statusFilter, setStatus]     = useState<'all' | 'scouted' | 'dibbed' | 'unclaimed'>('all');
-  const [search, setSearch]           = useState('');
-  const [editingTeam, setEditingTeam] = useState<number | null>(null);
-  const [editStatus, setEditStatus]   = useState<'unclaimed' | 'dibbed' | 'scouted'>('unclaimed');
-  const [editData, setEditData]       = useState<Record<string, unknown>>({});
-  const [saving, setSaving]           = useState(false);
+  const [statusFilter, setStatus]         = useState<'all' | 'scouted' | 'dibbed' | 'unclaimed'>('all');
+  const [search, setSearch]               = useState('');
+  const [editingTeam, setEditingTeam]     = useState<number | null>(null);
+  const [editStatus, setEditStatus]       = useState<'unclaimed' | 'dibbed' | 'scouted'>('unclaimed');
+  const [editData, setEditData]           = useState<Record<string, unknown>>({});
+  const [saving, setSaving]               = useState(false);
+  const [confirmResetAll, setConfirmResetAll] = useState(false);
+  const [resettingAll, setResettingAll]   = useState(false);
+  const [pitConfirmText, setPitConfirmText] = useState('');
 
   const filtered = useMemo(() => {
     let list = [...pits];
@@ -1120,8 +1275,84 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
     }
   }
 
+  async function handleReset(teamNumber: number) {
+    setSaving(true);
+    try {
+      await resetPit(teamNumber);
+      setEditingTeam(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleResetAll() {
+    setResettingAll(true);
+    try {
+      await resetAllPits();
+      setConfirmResetAll(false);
+      setPitConfirmText('');
+    } finally {
+      setResettingAll(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Admin: bulk reset */}
+      {isAdmin && (counts.scouted + counts.dibbed > 0) && (
+        <div className="flex flex-col gap-2 px-3 py-2.5 rounded-xl border border-[hsl(var(--destructive)/0.35)] bg-[hsl(var(--destructive)/0.06)]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <ShieldAlert size={14} className="text-[hsl(var(--destructive))] shrink-0" />
+              <span className="text-xs text-[hsl(var(--destructive))] font-medium">
+                Reset all pit data ({counts.scouted + counts.dibbed} entries)
+              </span>
+            </div>
+            {!confirmResetAll ? (
+              <button
+                type="button"
+                onClick={() => setConfirmResetAll(true)}
+                className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded-lg border border-[hsl(var(--destructive)/0.45)] text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)] cursor-pointer transition-colors shrink-0"
+              >
+                <RotateCcw size={10} /> Reset all
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setConfirmResetAll(false); setPitConfirmText(''); }}
+                className="text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer transition-colors shrink-0"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {confirmResetAll && (
+            <div className="flex flex-col gap-2">
+              <p className="text-[11px] text-[hsl(var(--destructive))]">
+                This resets all pit entries to unclaimed and clears scouting data. Type <span className="font-mono font-bold">RESET ALL</span> to confirm.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  value={pitConfirmText}
+                  onChange={(e) => setPitConfirmText(e.target.value)}
+                  placeholder="Type RESET ALL…"
+                  className="flex-1 h-8 px-2.5 rounded-lg border border-[hsl(var(--destructive)/0.5)] bg-[hsl(var(--muted))] text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[hsl(var(--destructive)/0.6)] placeholder:text-[hsl(var(--muted-foreground))]"
+                />
+                <button
+                  type="button"
+                  onClick={handleResetAll}
+                  disabled={pitConfirmText !== 'RESET ALL' || resettingAll}
+                  className="flex items-center gap-1 h-8 px-3 rounded-lg bg-[hsl(var(--destructive))] text-white text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {resettingAll ? <Loader2 size={10} className="animate-spin" /> : <RotateCcw size={10} />}
+                  {resettingAll ? 'Resetting…' : 'Reset all'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Status filter chips */}
       <div className="grid grid-cols-3 gap-2">
         {[
@@ -1229,7 +1460,7 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
                       />
                     )}
 
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex gap-2 mt-3 flex-wrap">
                       <button
                         type="button"
                         onClick={() => handleSave(p.teamNumber)}
@@ -1246,6 +1477,16 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
                       >
                         <X size={11} /> Cancel
                       </button>
+                      {p.status !== 'unclaimed' && (
+                        <button
+                          type="button"
+                          onClick={() => handleReset(p.teamNumber)}
+                          disabled={saving}
+                          className="flex items-center gap-1 h-7 px-3 rounded-lg border border-[hsl(var(--destructive)/0.45)] text-xs text-[hsl(var(--destructive))] hover:bg-[hsl(var(--destructive)/0.1)] cursor-pointer transition-colors disabled:opacity-50 ml-auto"
+                        >
+                          <RotateCcw size={11} /> Reset pit
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1273,7 +1514,7 @@ export function DataManagement() {
 
   const isLead = user?.role === 'lead' || user?.role === 'admin';
 
-  const gameYear = currentEvent?.activeGameYear ?? 2026;
+  const gameYear = currentEvent?.activeGameYear ?? 2025;
   const game = getGameConfig(gameYear);
   const allFields = useMemo(() =>
     [...game.match.auto, ...game.match.teleop, ...game.match.endgame],
@@ -1344,10 +1585,10 @@ export function DataManagement() {
           </div>
         ) : (
           <div className="max-w-2xl mx-auto">
-            {tab === 'teams'   && <TeamsView   matches={matches} allFields={allFields} outlierTooltips={outlierTooltips} initialTeam={initialTeam} />}
-            {tab === 'entries' && <RawEntriesView matches={matches} allFields={allFields} outlierTooltips={outlierTooltips} initialTeam={initialTeam} />}
+            {tab === 'teams'   && <TeamsView   matches={matches} allFields={allFields} outlierTooltips={outlierTooltips} gameYear={gameYear} fieldSrc={game.field.src} initialTeam={initialTeam} />}
+            {tab === 'entries' && <RawEntriesView matches={matches} allFields={allFields} outlierTooltips={outlierTooltips} gameYear={gameYear} initialTeam={initialTeam} />}
             {tab === 'pits'    && <PitsView pitFields={pitFields} />}
-            {tab === 'graph'   && <ScatterView matches={matches} allFields={allFields} />}
+            {tab === 'graph'   && <ScatterView matches={matches} allFields={allFields} gameYear={gameYear} />}
           </div>
         )}
       </div>

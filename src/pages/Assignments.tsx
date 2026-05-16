@@ -143,20 +143,9 @@ function NotificationsPanel() {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between gap-2 pb-2">
-        <div className="flex items-center gap-2">
-          <Bell size={15} className="text-[hsl(var(--accent))]" />
-          <CardTitle>Notifications</CardTitle>
-        </div>
-        {notifications.length > 1 && (
-          <button
-            type="button"
-            onClick={() => notifications.forEach((n) => n.id && handleClear(n.id))}
-            className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer"
-          >
-            Clear all
-          </button>
-        )}
+      <CardHeader className="flex-row items-center gap-2 pb-2">
+        <Bell size={15} className="text-[hsl(var(--accent))]" />
+        <CardTitle>Notifications</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {!notifEnabled && notificationsSupported && (
@@ -188,6 +177,15 @@ function NotificationsPanel() {
         ))}
         {clearError && (
           <p className="text-xs text-[hsl(var(--destructive))]" role="alert">{clearError}</p>
+        )}
+        {notifications.length > 1 && (
+          <button
+            type="button"
+            onClick={() => notifications.forEach((n) => n.id && handleClear(n.id))}
+            className="w-full mt-1 py-1.5 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-pointer border-t border-[hsl(var(--border)/0.5)] text-center transition-colors"
+          >
+            Clear all
+          </button>
         )}
       </CardContent>
     </Card>

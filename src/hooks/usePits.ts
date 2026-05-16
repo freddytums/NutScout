@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { subscribeToPits, claimPit, unclaimPit, submitPitScouting, updatePitEntry } from '@/lib/firestore';
+import { subscribeToPits, claimPit, unclaimPit, submitPitScouting, updatePitEntry, resetPit, resetAllPits } from '@/lib/firestore';
 import { useEventStore } from '@/store/eventStore';
 import { useAuth } from './useAuth';
 import type { PitEntry } from '@/types/scout';
@@ -50,5 +50,15 @@ export function usePits() {
     await updatePitEntry(currentEventId, teamNumber, { status, data });
   }
 
-  return { pits, pitMap, loading, claim, unclaim, assignPit, submitPit, editPit };
+  async function reset(teamNumber: number) {
+    if (!currentEventId) return;
+    await resetPit(currentEventId, teamNumber);
+  }
+
+  async function resetAll() {
+    if (!currentEventId) return;
+    await resetAllPits(currentEventId);
+  }
+
+  return { pits, pitMap, loading, claim, unclaim, assignPit, submitPit, editPit, reset, resetAll };
 }

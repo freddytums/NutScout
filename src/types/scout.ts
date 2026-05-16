@@ -112,6 +112,8 @@ export interface EventConfig {
   };
   teamAssignments?: Record<string, number>;
   activeGameYear: number;
+  locked?: boolean;   // when true, non-admins can only read
+  hidden?: boolean;   // when true, event is archived and not shown in selectors
 }
 
 // ─── Role helpers ─────────────────────────────────────────────────────────────

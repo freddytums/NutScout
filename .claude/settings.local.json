@@ -15,7 +15,21 @@
       "Bash(node *)",
       "Bash(python -c \"from PIL import Image; img = Image.open\\('public/NUTRONs.png'\\); print\\(img.size, img.mode\\)\")",
       "Bash(powershell -command 'Add-Type -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile\\(\\(Resolve-Path '\\\\''public/NUTRONs.png'\\\\''\\)\\); Write-Output \"$\\($img.Width\\)x$\\($img.Height\\)\"; $img.Dispose\\(\\)')",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "Bash(firebase deploy *)",
+      "Bash(npx firebase *)",
+      "PowerShell(Get-Command *)",
+      "Bash(git -C C:/github/NutScout status)",
+      "Bash(git -C C:/github/NutScout log --oneline -5)",
+      "PowerShell(Get-Item *)",
+      "Bash(python3 -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python -c \"import pypdf; print\\('pypdf ok'\\)\")",
+      "Bash(python -c \"import PyPDF2; print\\('PyPDF2 ok'\\)\")",
+      "Bash(python -c \"import pdfminer; print\\('pdfminer ok'\\)\")",
+      "Bash(python *)",
+      "Bash(copy \"C:\\\\github\\\\NutScout\\\\frc_resources\\\\2026FieldMap.png\" \"C:\\\\github\\\\NutScout\\\\public\\\\field-2026.png\")",
+      "Bash(powershell -command \"if \\(Test-Path 'C:/github/NutScout/public/field-2026.png'\\) { \\(Get-Item 'C:/github/NutScout/public/field-2026.png'\\).Length } else { 'missing' }\")"
     ]
   }
 }
