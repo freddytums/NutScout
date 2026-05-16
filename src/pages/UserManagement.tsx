@@ -9,9 +9,10 @@ import { updateUserProfile, deleteUserAccount, deleteUserAccountsBatch } from '@
 import { cn } from '@/lib/utils';
 import type { AppUser, UserRole } from '@/types/scout';
 
-const ROLES: UserRole[] = ['scout', 'team-lead', 'lead', 'admin'];
+const ROLES: UserRole[] = ['guest', 'scout', 'team-lead', 'lead', 'admin'];
 
 const ROLE_COLORS: Record<UserRole, string> = {
+  guest: 'bg-[hsl(var(--muted)/0.5)] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]',
   scout: 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]',
   'team-lead': 'bg-blue-500/15 text-blue-400 border border-blue-500/30',
   lead: 'bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] border border-[hsl(var(--accent)/0.3)]',
@@ -19,6 +20,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
 };
 
 const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
+  guest: 'No access — awaiting authorization',
   scout: 'Submit scouting data',
   'team-lead': 'Manage own team scouts & schedule',
   lead: 'Full scouting oversight',

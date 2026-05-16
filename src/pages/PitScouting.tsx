@@ -6,9 +6,11 @@ import { NutronsCelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FormRenderer, initFormValues } from '@/components/scouting/FormRenderer';
+import { PitPhotoUpload } from '@/components/scouting/PitPhotoUpload';
 import { usePits } from '@/hooks/usePits';
 import { useEventStore } from '@/store/eventStore';
 import { getGameConfig } from '@/config/games';
+import type { PitPhoto } from '@/types/scout';
 
 export function PitScouting() {
   const [params] = useSearchParams();
@@ -20,6 +22,7 @@ export function PitScouting() {
 
   const [teamNumber, setTeamNumber] = useState(params.get('team') ?? '');
   const [values, setValues] = useState(() => initFormValues(game.pit));
+  const [photos, setPhotos] = useState<PitPhoto[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -31,7 +34,7 @@ export function PitScouting() {
     if (!teamNumber) return;
     setSubmitting(true);
     try {
-      await submitPit(parseInt(teamNumber), values);
+      await submitPit(parseInt(teamNumber), values, photos);
       setSubmitted(true);
     } finally {
       setSubmitting(false);
@@ -41,6 +44,7 @@ export function PitScouting() {
   function reset() {
     setTeamNumber('');
     setValues(initFormValues(game.pit));
+    setPhotos([]);
     setSubmitted(false);
   }
 
@@ -94,8 +98,11 @@ export function PitScouting() {
             }} />
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           <FormRenderer fields={game.pit} values={values} onChange={handleChange} />
+          <div className="pt-3 border-t border-[hsl(var(--border)/0.5)]">
+            <PitPhotoUpload photos={photos} onChange={setPhotos} />
+          </div>
         </CardContent>
       </Card>
 

@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, ChevronDown, AlertTriangle,
   CalendarOff, Loader2, Trash2, X, ArrowUpDown, ArrowUp, ArrowDown,
-  Download, Crosshair, RotateCcw, Pencil, Check, ShieldAlert, Route,
+  Download, Crosshair, RotateCcw, Pencil, Check, ShieldAlert, Route, Camera,
 } from 'lucide-react';
 import { useMatches } from '@/hooks/useMatches';
 import { usePits } from '@/hooks/usePits';
@@ -14,9 +14,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { findTeamSlot } from '@/lib/tba';
 import { getGameConfig } from '@/config/games';
 import { findOutliers } from '@/lib/dataQuality';
-import type { MatchEntry } from '@/types/scout';
+import type { MatchEntry, PitPhoto } from '@/types/scout';
 import type { GameField } from '@/types/game';
 import type { PathSegment } from '@/components/scouting/fields/PathTracerField';
+import { PitPhotoUpload } from '@/components/scouting/PitPhotoUpload';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1242,10 +1243,12 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
   const [editingTeam, setEditingTeam]     = useState<number | null>(null);
   const [editStatus, setEditStatus]       = useState<'unclaimed' | 'dibbed' | 'scouted'>('unclaimed');
   const [editData, setEditData]           = useState<Record<string, unknown>>({});
+  const [editPhotos, setEditPhotos]       = useState<PitPhoto[]>([]);
   const [saving, setSaving]               = useState(false);
   const [confirmResetAll, setConfirmResetAll] = useState(false);
   const [resettingAll, setResettingAll]   = useState(false);
   const [pitConfirmText, setPitConfirmText] = useState('');
+  const [lightbox, setLightbox]           = useState<{ photos: PitPhoto[]; idx: number; team: number } | null>(null);
 
   const filtered = useMemo(() => {
     let list = [...pits];
@@ -1264,12 +1267,13 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
     setEditingTeam(p.teamNumber);
     setEditStatus(p.status);
     setEditData({ ...(p.data ?? {}) });
+    setEditPhotos(p.photos ? [...p.photos] : []);
   }
 
   async function handleSave(teamNumber: number) {
     setSaving(true);
     try {
-      await editPit(teamNumber, editStatus, editData);
+      await editPit(teamNumber, editStatus, editData, editPhotos);
       setEditingTeam(null);
     } finally {
       setSaving(false);
@@ -1425,6 +1429,27 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
                   )}
                 </div>
 
+                {/* Photo thumbnail strip (read-only preview when not editing) */}
+                {!isEditing && p.photos && p.photos.length > 0 && (
+                  <div className="px-3 pb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-[hsl(var(--border)/0.3)]">
+                    <Camera size={10} className="text-[hsl(var(--muted-foreground))] shrink-0" />
+                    {p.photos.map((photo, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setLightbox({ photos: p.photos!, idx: i, team: p.teamNumber })}
+                        className="relative shrink-0 w-12 h-12 rounded-md overflow-hidden border border-[hsl(var(--border))] bg-black hover:border-[hsl(var(--accent)/0.6)] cursor-pointer transition-colors"
+                        aria-label={`View photo ${i + 1} of team ${p.teamNumber}`}
+                      >
+                        <img src={photo.url} alt={photo.caption || ''} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                    <span className="text-[9px] font-data text-[hsl(var(--muted-foreground))] ml-1 shrink-0">
+                      {p.photos.length} photo{p.photos.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
+
                 {/* Inline edit panel */}
                 {isEditing && (
                   <div className="px-3 pb-3 pt-2 border-b border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.15)]">
@@ -1461,6 +1486,11 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
                       />
                     )}
 
+                    {/* Photos */}
+                    <div className="mt-3 pt-3 border-t border-[hsl(var(--border)/0.4)]">
+                      <PitPhotoUpload photos={editPhotos} onChange={setEditPhotos} />
+                    </div>
+
                     <div className="flex gap-2 mt-3 flex-wrap">
                       <button
                         type="button"
@@ -1496,6 +1526,63 @@ function PitsView({ pitFields }: { pitFields: GameField[] }) {
           })}
         </div>
       </div>
+
+      {/* Photo lightbox */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setLightbox(null); }}
+            aria-label="Close"
+            className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/70 hover:bg-[hsl(var(--destructive))] text-white flex items-center justify-center cursor-pointer transition-colors"
+          >
+            <X size={18} />
+          </button>
+
+          <div className="flex flex-col items-center gap-3 max-w-[92vw] max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={lightbox.photos[lightbox.idx].url}
+              alt={lightbox.photos[lightbox.idx].caption || `Team ${lightbox.team} photo`}
+              className="max-w-full max-h-[78vh] object-contain rounded-lg"
+            />
+            <div className="text-center">
+              <div className="font-data text-sm font-bold text-white">Team {lightbox.team}</div>
+              {lightbox.photos[lightbox.idx].caption && (
+                <div className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                  {lightbox.photos[lightbox.idx].caption}
+                </div>
+              )}
+            </div>
+
+            {lightbox.photos.length > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLightbox((l) => l && { ...l, idx: (l.idx - 1 + l.photos.length) % l.photos.length })}
+                  className="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs cursor-pointer transition-colors"
+                >
+                  ← Prev
+                </button>
+                <span className="text-xs font-data text-[hsl(var(--muted-foreground))]">
+                  {lightbox.idx + 1} / {lightbox.photos.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLightbox((l) => l && { ...l, idx: (l.idx + 1) % l.photos.length })}
+                  className="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs cursor-pointer transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

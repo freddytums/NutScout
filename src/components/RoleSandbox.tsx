@@ -7,9 +7,10 @@ import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type { UserRole, AppUser } from '@/types/scout';
 
-const ROLES: UserRole[] = ['scout', 'team-lead', 'lead', 'admin'];
+const ROLES: UserRole[] = ['guest', 'scout', 'team-lead', 'lead', 'admin'];
 
 const ROLE_COLORS: Record<UserRole, string> = {
+  guest:       'bg-[hsl(var(--muted)/0.6)] text-[hsl(var(--muted-foreground))]',
   scout:       'bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]',
   'team-lead': 'bg-blue-500/20 text-blue-300',
   lead:        'bg-[hsl(var(--accent)/0.2)] text-[hsl(var(--accent))]',

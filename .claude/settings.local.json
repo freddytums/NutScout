@@ -29,7 +29,12 @@
       "Bash(python -c \"import pdfminer; print\\('pdfminer ok'\\)\")",
       "Bash(python *)",
       "Bash(copy \"C:\\\\github\\\\NutScout\\\\frc_resources\\\\2026FieldMap.png\" \"C:\\\\github\\\\NutScout\\\\public\\\\field-2026.png\")",
-      "Bash(powershell -command \"if \\(Test-Path 'C:/github/NutScout/public/field-2026.png'\\) { \\(Get-Item 'C:/github/NutScout/public/field-2026.png'\\).Length } else { 'missing' }\")"
+      "Bash(powershell -command \"if \\(Test-Path 'C:/github/NutScout/public/field-2026.png'\\) { \\(Get-Item 'C:/github/NutScout/public/field-2026.png'\\).Length } else { 'missing' }\")",
+      "Bash(npx eslint *)",
+      "Bash(python3 *)",
+      "Bash(where python.exe)",
+      "Bash(py --version)",
+      "Bash(dir *)"
     ]
   }
 }

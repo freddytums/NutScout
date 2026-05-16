@@ -1,34 +1,49 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
-import { getUser, upsertUser } from '@/lib/firestore';
+import { getUser, upsertUser, subscribeToUser } from '@/lib/firestore';
 import { useAuthStore } from '@/store/authStore';
 import { useSandboxStore } from '@/store/sandboxStore';
 
 export function useAuthInit() {
   const { setUser, setLoading } = useAuthStore();
+  const userDocUnsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Tear down any prior user-doc listener before processing the new auth state.
+      userDocUnsubRef.current?.();
+      userDocUnsubRef.current = null;
+
       if (firebaseUser) {
         let appUser = await getUser(firebaseUser.uid);
         if (!appUser) {
+          // New sign-ups start with no access — a lead/admin must elevate them.
           await upsertUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email ?? '',
-            displayName: firebaseUser.displayName ?? 'Scout',
+            displayName: firebaseUser.displayName ?? 'Guest',
             photoURL: firebaseUser.photoURL ?? undefined,
-            role: 'scout',
+            role: 'guest',
           });
           appUser = await getUser(firebaseUser.uid);
         }
         setUser(appUser);
+        setLoading(false);
+
+        // Subscribe to the user's doc so role changes propagate without re-login.
+        userDocUnsubRef.current = subscribeToUser(firebaseUser.uid, (updated) => {
+          if (updated) setUser(updated);
+        });
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return unsub;
+    return () => {
+      unsubAuth();
+      userDocUnsubRef.current?.();
+    };
   }, [setUser, setLoading]);
 }
 

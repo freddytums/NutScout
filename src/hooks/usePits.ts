@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { subscribeToPits, claimPit, unclaimPit, submitPitScouting, updatePitEntry, resetPit, resetAllPits } from '@/lib/firestore';
 import { useEventStore } from '@/store/eventStore';
 import { useAuth } from './useAuth';
-import type { PitEntry } from '@/types/scout';
+import type { PitEntry, PitPhoto } from '@/types/scout';
 
 export function usePits() {
   const { currentEventId } = useEventStore();
@@ -40,14 +40,21 @@ export function usePits() {
     await claimPit(currentEventId, teamNumber, targetUid, targetName);
   }
 
-  async function submitPit(teamNumber: number, data: Record<string, unknown>) {
+  async function submitPit(teamNumber: number, data: Record<string, unknown>, photos?: PitPhoto[]) {
     if (!currentEventId || !user) return;
-    await submitPitScouting(currentEventId, teamNumber, user.uid, data);
+    await submitPitScouting(currentEventId, teamNumber, user.uid, data, photos);
   }
 
-  async function editPit(teamNumber: number, status: import('@/types/scout').PitStatus, data: Record<string, unknown>) {
+  async function editPit(
+    teamNumber: number,
+    status: import('@/types/scout').PitStatus,
+    data: Record<string, unknown>,
+    photos?: PitPhoto[]
+  ) {
     if (!currentEventId) return;
-    await updatePitEntry(currentEventId, teamNumber, { status, data });
+    const updates: Parameters<typeof updatePitEntry>[2] = { status, data };
+    if (photos !== undefined) updates.photos = photos;
+    await updatePitEntry(currentEventId, teamNumber, updates);
   }
 
   async function reset(teamNumber: number) {

@@ -54,6 +54,11 @@ export interface TBAAlliance {
   surrogate_team_keys: string[];
 }
 
+export interface TBAVideo {
+  key: string;                   // YouTube video ID, or TBA video key
+  type: 'youtube' | 'tba';
+}
+
 export interface TBAMatch {
   key: string;         // "2026casd_qm1"
   comp_level: 'qm' | 'ef' | 'qf' | 'sf' | 'f';
@@ -63,6 +68,8 @@ export interface TBAMatch {
     red: TBAAlliance;
     blue: TBAAlliance;
   };
+  winning_alliance?: 'red' | 'blue' | '';
+  videos?: TBAVideo[];
   time: number | null;           // unix timestamp (scheduled)
   predicted_time: number | null;
   actual_time: number | null;
@@ -83,8 +90,22 @@ export function getEventMatches(eventKey: string) {
   return tbaFetch<TBAMatch[]>(`/event/${eventKey}/matches`);
 }
 
+export function getMatch(matchKey: string) {
+  return tbaFetch<TBAMatch>(`/match/${matchKey}`);
+}
+
 export function getTeam(teamNumber: number) {
   return tbaFetch<TBATeam>(`/team/frc${teamNumber}`);
+}
+
+/** Build a TBA match key from an event key + qual match number. */
+export function buildMatchKey(eventKey: string, matchNumber: number, compLevel: 'qm' | 'qf' | 'sf' | 'f' = 'qm'): string {
+  return `${eventKey}_${compLevel}${matchNumber}`;
+}
+
+/** External TBA web URL for a match. */
+export function tbaMatchUrl(matchKey: string): string {
+  return `https://www.thebluealliance.com/match/${matchKey}`;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

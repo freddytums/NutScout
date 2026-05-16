@@ -16,7 +16,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { AppUser, PitEntry, MatchEntry, EventConfig, Station, StationAssignments, StationAssignment, GeneratedSchedule, ScoutNotification } from '@/types/scout';
+import type { AppUser, PitEntry, PitPhoto, MatchEntry, EventConfig, Station, StationAssignments, StationAssignment, GeneratedSchedule, ScoutNotification } from '@/types/scout';
 
 // ─── Collections ────────────────────────────────────────────────────────────
 
@@ -30,6 +30,12 @@ export const matchesCol = (eventId: string) => collection(db, 'events', eventId,
 export async function getUser(uid: string): Promise<AppUser | null> {
   const snap = await getDoc(doc(usersCol(), uid));
   return snap.exists() ? (snap.data() as AppUser) : null;
+}
+
+export function subscribeToUser(uid: string, cb: (user: AppUser | null) => void) {
+  return onSnapshot(doc(usersCol(), uid), (snap) => {
+    cb(snap.exists() ? (snap.data() as AppUser) : null);
+  });
 }
 
 export async function upsertUser(user: Omit<AppUser, 'createdAt'> & { createdAt?: Timestamp }) {
@@ -86,15 +92,21 @@ export async function submitPitScouting(
   eventId: string,
   teamNumber: number,
   userId: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  photos?: PitPhoto[]
 ) {
   const ref = doc(pitsCol(eventId), String(teamNumber));
-  await updateDoc(ref, {
+  const updates: Record<string, unknown> = {
     status: 'scouted',
     scoutedBy: userId,
     scoutedAt: serverTimestamp(),
     data,
-  });
+  };
+  // Only write photos field when given — preserves prior photos if caller omits it.
+  if (photos !== undefined) {
+    updates.photos = photos.length > 0 ? photos : deleteField();
+  }
+  await updateDoc(ref, updates);
 }
 
 // ─── Match Scouting ──────────────────────────────────────────────────────────
@@ -152,15 +164,21 @@ export async function updateMatchData(
 export async function updatePitEntry(
   eventId: string,
   teamNumber: number,
-  updates: Partial<Pick<PitEntry, 'status' | 'data'>>
+  updates: Partial<Pick<PitEntry, 'status' | 'data' | 'photos'>>
 ) {
-  await updateDoc(doc(pitsCol(eventId), String(teamNumber)), updates);
+  // Empty photos array → delete the field so we don't keep an empty list around.
+  const patch: Record<string, unknown> = { ...updates };
+  if (updates.photos !== undefined && (updates.photos?.length ?? 0) === 0) {
+    patch.photos = deleteField();
+  }
+  await updateDoc(doc(pitsCol(eventId), String(teamNumber)), patch);
 }
 
 export async function resetPit(eventId: string, teamNumber: number) {
   await updateDoc(doc(pitsCol(eventId), String(teamNumber)), {
     status: 'unclaimed',
     data: deleteField(),
+    photos: deleteField(),
     scoutedBy: deleteField(),
     scoutedAt: deleteField(),
     dibbedBy: deleteField(),
@@ -176,6 +194,7 @@ export async function resetAllPits(eventId: string) {
     batch.update(d.ref, {
       status: 'unclaimed',
       data: deleteField(),
+      photos: deleteField(),
       scoutedBy: deleteField(),
       scoutedAt: deleteField(),
       dibbedBy: deleteField(),

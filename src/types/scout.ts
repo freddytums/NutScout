@@ -1,6 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'scout' | 'team-lead' | 'lead' | 'admin';
+export type UserRole = 'guest' | 'scout' | 'team-lead' | 'lead' | 'admin';
 
 export interface AppUser {
   uid: string;
@@ -51,6 +51,11 @@ export interface GeneratedSchedule {
 
 export type PitStatus = 'unclaimed' | 'dibbed' | 'scouted';
 
+export interface PitPhoto {
+  url: string;       // base64 data URL (image/jpeg)
+  caption?: string;
+}
+
 export interface PitEntry {
   teamNumber: number;
   teamName?: string;
@@ -63,6 +68,7 @@ export interface PitEntry {
   scoutedBy?: string;
   scoutedAt?: Timestamp;
   data?: Record<string, unknown>;
+  photos?: PitPhoto[];
 }
 
 export interface MatchEntry {
@@ -117,6 +123,10 @@ export interface EventConfig {
 }
 
 // ─── Role helpers ─────────────────────────────────────────────────────────────
+
+export function isAtLeastScout(role: UserRole): boolean {
+  return role !== 'guest';
+}
 
 export function isAtLeastTeamLead(role: UserRole): boolean {
   return role === 'team-lead' || role === 'lead' || role === 'admin';
