@@ -19,6 +19,7 @@ const ManageHub = lazy(() => import('@/pages/ManageHub').then((m) => ({ default:
 const LeadDashboard = lazy(() => import('@/pages/LeadDashboard').then((m) => ({ default: m.LeadDashboard })));
 const DataManagement = lazy(() => import('@/pages/DataManagement').then((m) => ({ default: m.DataManagement })));
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })));
+const AIChat = lazy(() => import('@/pages/AIChat').then((m) => ({ default: m.AIChat })));
 
 function PageLoader() {
   return (
@@ -68,6 +69,7 @@ function App() {
               <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="ai-chat" element={<AIChat />} />
 
               {/* Lead / admin workspace */}
               <Route path="manage" element={<ManageHub />}>

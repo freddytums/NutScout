@@ -1,13 +1,15 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { ClipboardList, Wrench, CalendarCheck, LayoutDashboard, Settings } from 'lucide-react';
+import { ClipboardList, Wrench, CalendarCheck, LayoutDashboard, Settings, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { RoleSandbox } from '@/components/RoleSandbox';
 import { ProfileMenu } from '@/components/ProfileMenu';
+import { ChatDrawer } from '@/components/ai/ChatDrawer';
 
 const navItems = [
   { to: '/match',       icon: ClipboardList,   label: 'Match'    },
   { to: '/pits',        icon: Wrench,           label: 'Pits'     },
+  { to: '/ai-chat',     icon: Bot,              label: 'Ask AI'   },
   { to: '/assignments', icon: CalendarCheck,    label: 'Schedule' },
   { to: '/manage',      icon: LayoutDashboard,  label: 'Manage',  roleRequired: 'lead' as const },
   { to: '/settings',    icon: Settings,         label: 'Settings' },
@@ -44,6 +46,9 @@ export function AppShell() {
       <main className="flex-1 overflow-y-auto pb-20">
         <Outlet />
       </main>
+
+      {/* Global AI chat drawer */}
+      <ChatDrawer />
 
       {/* Bottom nav */}
       <nav

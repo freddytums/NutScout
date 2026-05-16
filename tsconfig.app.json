@@ -22,9 +22,10 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./shared/*"]
     },
     "ignoreDeprecations": "6.0"
   },
-  "include": ["src"]
+  "include": ["src", "shared"]
 }
