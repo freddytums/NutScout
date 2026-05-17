@@ -21,6 +21,7 @@ const DataManagement = lazy(() => import('@/pages/DataManagement').then((m) => (
 const DataViewer = lazy(() => import('@/pages/DataViewer').then((m) => ({ default: m.DataViewer })));
 const PickList = lazy(() => import('@/pages/PickList').then((m) => ({ default: m.PickList })));
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })));
+const AIChat = lazy(() => import('@/pages/AIChat').then((m) => ({ default: m.AIChat })));
 
 function PageLoader() {
   return (
@@ -72,6 +73,7 @@ function App() {
               <Route path="picklist" element={<PickList />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="ai-chat" element={<AIChat />} />
 
               {/* Lead / admin workspace */}
               <Route path="manage" element={<ManageHub />}>

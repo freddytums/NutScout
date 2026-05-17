@@ -1,16 +1,18 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { ClipboardList, Wrench, CalendarCheck, LayoutDashboard, Settings } from 'lucide-react';
+import { ClipboardList, Wrench, CalendarCheck, LayoutDashboard, Settings, Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { isAtLeastScout } from '@/types/scout';
 import { RoleSandbox } from '@/components/RoleSandbox';
 import { ProfileMenu } from '@/components/ProfileMenu';
 import { ModeSwitcher } from '@/components/mode-switcher/ModeSwitcher';
+import { ChatDrawer } from '@/components/ai/ChatDrawer';
 import { GuestLanding } from '@/pages/GuestLanding';
 
 const navItems = [
   { to: '/match',       icon: ClipboardList,   label: 'Match'    },
   { to: '/pits',        icon: Wrench,           label: 'Pits'     },
+  { to: '/ai-chat',     icon: Bot,              label: 'Ask AI'   },
   { to: '/assignments', icon: CalendarCheck,    label: 'Schedule' },
   { to: '/manage',      icon: LayoutDashboard,  label: 'Manage',  roleRequired: 'lead' as const },
   { to: '/settings',    icon: Settings,         label: 'Settings' },
@@ -52,36 +54,40 @@ export function AppShell() {
         {isGuest ? <GuestLanding /> : <Outlet />}
       </main>
 
-      {/* Bottom nav — hidden for guests since they have nowhere to go */}
+      {/* Global AI chat drawer + bottom nav — both hidden for guests since
+          they have no access to scouting data or navigation destinations. */}
       {!isGuest && (
-        <nav
-          className="fixed bottom-0 inset-x-0 z-40 border-t border-[hsl(var(--border))] bg-[hsl(var(--primary)/0.95)] backdrop-blur-md safe-bottom"
-          aria-label="Main navigation"
-        >
-          <div className="flex items-center justify-around h-16">
-            {visibleItems.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  cn(
-                    'flex flex-col items-center justify-center gap-1 min-w-[44px] min-h-[44px] px-1 py-1 rounded-lg transition-all duration-150',
-                    isActive
-                      ? 'text-[hsl(var(--accent))]'
-                      : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
-                  )
-                }
-              >
-                {({ isActive }: { isActive: boolean }) => (
-                  <>
-                    <Icon size={20} strokeWidth={isActive ? 2.5 : 1.75} />
-                    <span className="text-[9px] font-medium">{label}</span>
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        </nav>
+        <>
+          <ChatDrawer />
+          <nav
+            className="fixed bottom-0 inset-x-0 z-40 border-t border-[hsl(var(--border))] bg-[hsl(var(--primary)/0.95)] backdrop-blur-md safe-bottom"
+            aria-label="Main navigation"
+          >
+            <div className="flex items-center justify-around h-16">
+              {visibleItems.map(({ to, icon: Icon, label }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex flex-col items-center justify-center gap-1 min-w-[44px] min-h-[44px] px-1 py-1 rounded-lg transition-all duration-150',
+                      isActive
+                        ? 'text-[hsl(var(--accent))]'
+                        : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                    )
+                  }
+                >
+                  {({ isActive }: { isActive: boolean }) => (
+                    <>
+                      <Icon size={20} strokeWidth={isActive ? 2.5 : 1.75} />
+                      <span className="text-[9px] font-medium">{label}</span>
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        </>
       )}
     </div>
   );

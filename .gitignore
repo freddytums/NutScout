@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Functions build output (functions/lib is also covered by functions/.gitignore)
+functions/lib
+
+# Stray compiled output that shouldn't live next to .ts sources
+shared/**/*.js
+shared/**/*.js.map
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

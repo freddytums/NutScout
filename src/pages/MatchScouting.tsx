@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { HelpButton } from '@/components/ui/HelpButton';
+import { AskAiButton } from '@/components/ai/AskAiButton';
 import { CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Button } from '@/components/ui/button';
@@ -354,9 +355,19 @@ export function MatchScouting() {
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-semibold">{STEP_LABELS[step]}</h2>
-        <HelpButton content={{
+        <div className="flex items-center gap-2">
+          {currentEvent && (
+            <AskAiButton
+              prompt={
+                meta.teamNumber
+                  ? `Summarize team ${meta.teamNumber} at event ${currentEvent.id}. Highlight strengths and weaknesses across all their match entries.`
+                  : `What teams are at event ${currentEvent.id}? Suggest a few interesting ones to look at.`
+              }
+            />
+          )}
+          <HelpButton content={{
           title: 'Match Scouting',
           description: 'Record one robot\'s performance during a single qualification match. Fill out all four steps before submitting.',
           steps: [
@@ -368,6 +379,7 @@ export function MatchScouting() {
           ],
           tip: 'Tap a green cell in the match picker to review an already-scouted entry for that slot.',
         }} />
+        </div>
       </div>
 
       {step === 'meta' && (

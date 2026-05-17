@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HelpButton } from '@/components/ui/HelpButton';
+import { AskAiButton } from '@/components/ai/AskAiButton';
 import { X, CheckCircle2, Hand, ClipboardList, Loader2, UserPlus } from 'lucide-react';
 import { PitCell } from '@/components/pit-map/PitCell';
 import { Badge } from '@/components/ui/badge';
@@ -206,7 +207,10 @@ export function PitMap() {
             tip: 'You can only unclaim a pit you dibbed yourself. Leads can reassign from the dashboard.',
           }} />
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <AskAiButton
+            prompt={`Which pits at event ${currentEvent.id} are still unscouted? List team numbers and grid locations.`}
+          />
           <Badge variant="default">{scouted}/{total} done</Badge>
           {dibbed > 0 && <Badge variant="amber">{dibbed} claimed</Badge>}
         </div>

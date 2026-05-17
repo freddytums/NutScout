@@ -1,5 +1,6 @@
 import { useState, useMemo, type ReactNode } from 'react';
 import { HelpButton } from '@/components/ui/HelpButton';
+import { AskAiButton } from '@/components/ai/AskAiButton';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, AlertTriangle, CheckCircle2, Users, Loader2, CalendarOff,
@@ -676,9 +677,17 @@ export function LeadDashboard() {
 
   return (
     <div className="p-4 flex flex-col gap-4 max-w-2xl mx-auto">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-semibold">Scouting Lead Dashboard</h2>
-        <HelpButton content={{
+        <div className="flex items-center gap-2">
+          {currentEvent && (
+            <AskAiButton
+              size="md"
+              label="Ask AI"
+              prompt={`Explain the top data-quality issues in event ${currentEvent.id}, grouped by severity. Suggest which to fix first.`}
+            />
+          )}
+          <HelpButton content={{
           title: 'Lead Dashboard',
           description: 'Command center for the scouting lead. Monitor data quality and coverage gaps in real time.',
           steps: [
@@ -690,6 +699,7 @@ export function LeadDashboard() {
           ],
           tip: 'Tap any team badge in the issues list to jump directly to their data page.',
         }} />
+        </div>
       </div>
 
       {!currentEvent && !loading ? (

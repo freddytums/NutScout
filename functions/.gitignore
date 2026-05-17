@@ -1,0 +1,7 @@
+node_modules/
+# Anchored to the top of the functions/ workspace so it only matches the tsc
+# build output (functions/lib/), not source directories like functions/src/lib/.
+/lib/
+.env
+.env.local
+*.log
