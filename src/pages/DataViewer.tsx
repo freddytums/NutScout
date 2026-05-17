@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Search, X, ExternalLink, Loader2, Camera, BarChart3, Sliders,
   ChevronDown, ChevronRight, Eye, EyeOff, ArrowUp, ArrowDown,
-  Trophy, Play, Filter, Users, ClipboardList, Download, GripVertical,
+  Trophy, Play, Filter, Users, ClipboardList, Download, MoreVertical,
   Layers, RotateCcw, Pin, PinOff, Table2,
 } from 'lucide-react';
 import { HelpButton } from '@/components/ui/HelpButton';
@@ -89,26 +89,26 @@ interface Column {
 // active game config so adding new fields to a season automatically shows up.
 function buildColumns(matchFields: GameField[], pitFields: GameField[]): Column[] {
   const meta: Column[] = [
-    { id: 'kind',       label: 'Type',     kind: 'meta',  width: 60,  defaultVisible: true },
-    { id: 'team',       label: 'Team',     kind: 'meta',  width: 64,  numeric: true, align: 'right', defaultVisible: true },
-    { id: 'match',      label: 'Match',    kind: 'meta',  width: 56,  numeric: true, align: 'right', defaultVisible: true },
-    { id: 'alliance',   label: 'Alliance', kind: 'meta',  width: 64,  defaultVisible: true },
-    { id: 'position',   label: 'Pos',      kind: 'meta',  width: 44,  numeric: true, align: 'right', defaultVisible: false },
-    { id: 'scout',      label: 'Scout',    kind: 'meta',  width: 110, defaultVisible: false },
-    { id: 'status',     label: 'Status',   kind: 'meta',  width: 80,  defaultVisible: false },
-    { id: 'photos',     label: 'Photos',   kind: 'meta',  width: 60,  numeric: true, align: 'right', defaultVisible: true },
+    { id: 'kind',       label: 'Type',     kind: 'meta',  width: 76,  defaultVisible: true },
+    { id: 'team',       label: 'Team',     kind: 'meta',  width: 80,  numeric: true, align: 'right', defaultVisible: true },
+    { id: 'match',      label: 'Match',    kind: 'meta',  width: 76,  numeric: true, align: 'right', defaultVisible: true },
+    { id: 'alliance',   label: 'Alliance', kind: 'meta',  width: 84,  defaultVisible: true },
+    { id: 'position',   label: 'Pos',      kind: 'meta',  width: 60,  numeric: true, align: 'right', defaultVisible: false },
+    { id: 'scout',      label: 'Scout',    kind: 'meta',  width: 130, defaultVisible: false },
+    { id: 'status',     label: 'Status',   kind: 'meta',  width: 96,  defaultVisible: false },
+    { id: 'photos',     label: 'Photos',   kind: 'meta',  width: 76,  numeric: true, align: 'right', defaultVisible: true },
   ];
   const score: Column[] = [
-    { id: 'autoPts',    label: 'Auto',     kind: 'score', width: 56,  numeric: true, align: 'right', defaultVisible: true },
-    { id: 'teleopPts',  label: 'Teleop',   kind: 'score', width: 60,  numeric: true, align: 'right', defaultVisible: true },
-    { id: 'endgamePts', label: 'Endgame',  kind: 'score', width: 64,  numeric: true, align: 'right', defaultVisible: false },
-    { id: 'totalPts',   label: 'Total',    kind: 'score', width: 60,  numeric: true, align: 'right', defaultVisible: true },
+    { id: 'autoPts',    label: 'Auto',     kind: 'score', width: 72,  numeric: true, align: 'right', defaultVisible: true },
+    { id: 'teleopPts',  label: 'Teleop',   kind: 'score', width: 76,  numeric: true, align: 'right', defaultVisible: true },
+    { id: 'endgamePts', label: 'Endgame',  kind: 'score', width: 80,  numeric: true, align: 'right', defaultVisible: false },
+    { id: 'totalPts',   label: 'Total',    kind: 'score', width: 76,  numeric: true, align: 'right', defaultVisible: true },
   ];
   const matchCols: Column[] = matchFields.map((f) => ({
     id: `m:${f.id}`,
     label: f.label,
     kind: 'match-field',
-    width: f.type === 'textarea' || f.type === 'text' ? 180 : 88,
+    width: f.type === 'textarea' || f.type === 'text' ? 200 : 110,
     numeric: f.type === 'counter' || f.type === 'rating',
     align: f.type === 'counter' || f.type === 'rating' ? 'right' : 'left',
     fieldType: f.type,
@@ -118,13 +118,47 @@ function buildColumns(matchFields: GameField[], pitFields: GameField[]): Column[
     id: `p:${f.id}`,
     label: f.label,
     kind: 'pit-field',
-    width: f.type === 'textarea' || f.type === 'text' ? 200 : 100,
+    width: f.type === 'textarea' || f.type === 'text' ? 220 : 120,
     numeric: f.type === 'counter' || f.type === 'rating',
     align: f.type === 'counter' || f.type === 'rating' ? 'right' : 'left',
     fieldType: f.type,
     defaultVisible: false,
   }));
   return [...meta, ...score, ...matchCols, ...pitCols];
+}
+
+// User-visible string for a cell value. Used by per-column filtering and the
+// menu's "Filter values" list so what they pick matches what they see.
+function cellAsDisplay(v: string | number | boolean | null): string {
+  if (v === '' || v === null || v === undefined) return '';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  return String(v);
+}
+
+// Max distinct values we'll show in the column-menu filter list. Above this,
+// a column is treated as "high cardinality" and the filter UI is hidden
+// (would just be noise for things like Team #, Match #, Total points).
+const MAX_DISTINCT_FOR_FILTER = 20;
+
+// Returns the distinct display values present for `col` across `rows`, sorted
+// naturally. Returns null if the column is high-cardinality (no filter UI).
+function getDistinctValues(col: Column, rows: UnifiedRow[]): string[] | null {
+  // High-cardinality columns by ID — skip outright.
+  if (col.id === 'team' || col.id === 'match' || col.id === 'photos') return null;
+  if (col.kind === 'score') return null;                    // sums vary widely
+  if (col.fieldType === 'text' || col.fieldType === 'textarea') return null;
+  if (col.fieldType === 'counter' || col.fieldType === 'rating') return null;
+  if (col.fieldType === 'path' || col.fieldType === 'timer') return null;
+
+  const set = new Set<string>();
+  for (const r of rows) {
+    const d = cellAsDisplay(getCellValue(col, r));
+    if (d === '') continue;
+    set.add(d);
+    if (set.size > MAX_DISTINCT_FOR_FILTER) return null;
+  }
+  if (set.size === 0) return [];
+  return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
 function getCellValue(col: Column, row: UnifiedRow): string | number | boolean | null {
@@ -455,7 +489,9 @@ export function DataViewer() {
   const [selectedTeams, setSelectedTeams] = useState<Set<number>>(
     () => initialTeam ? new Set([parseInt(initialTeam)]) : new Set()
   );
-  const [allianceFilter, setAllianceFilter] = useState<'all' | 'red' | 'blue'>('all');
+  // Per-column value filters. A column with no entry (or empty Set) is unfiltered.
+  // Filter values are stored as the display strings users see (so booleans → "Yes"/"No").
+  const [columnFilters, setColumnFilters] = useState<Map<string, Set<string>>>(new Map());
   const [showColumnPicker, setShowColumnPicker] = useState(false);
   const [showTeamPicker, setShowTeamPicker]     = useState(false);
   const [showCharts, setShowCharts]             = useState(false);
@@ -485,6 +521,7 @@ export function DataViewer() {
   // Modals
   const [matchModal, setMatchModal] = useState<number | null>(null);
   const [photoModal, setPhotoModal] = useState<PitEntry | null>(null);
+  const [colMenu, setColMenu] = useState<{ colId: string; x: number; y: number } | null>(null);
 
   // ── Derived: filtered + sorted rows ────────────────────────────────────────
   const colById = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns]);
@@ -493,8 +530,6 @@ export function DataViewer() {
     return allRows.filter((r) => {
       if (source !== 'all' && r.kind !== source) return false;
       if (selectedTeams.size > 0 && !selectedTeams.has(r.teamNumber)) return false;
-      if (allianceFilter !== 'all' && r.kind === 'match' && r.alliance !== allianceFilter) return false;
-      if (allianceFilter !== 'all' && r.kind === 'pit') return false; // pits aren't per-alliance
       if (search) {
         const q = search.toLowerCase();
         const hit =
@@ -505,9 +540,17 @@ export function DataViewer() {
           r.kind.includes(q);
         if (!hit) return false;
       }
+      // Per-column value filters (multi-select)
+      for (const [colId, allowed] of columnFilters) {
+        if (allowed.size === 0) continue;
+        const col = colById.get(colId);
+        if (!col) continue;
+        const display = cellAsDisplay(getCellValue(col, r));
+        if (!allowed.has(display)) return false;
+      }
       return true;
     });
-  }, [allRows, source, selectedTeams, allianceFilter, search]);
+  }, [allRows, source, selectedTeams, search, columnFilters, colById]);
 
   const sortedRows = useMemo(() => {
     const col = colById.get(sortKey);
@@ -570,9 +613,16 @@ export function DataViewer() {
     return [...s].sort((a, b) => a - b);
   }, [matches, pits]);
 
-  function toggleSort(colId: string) {
-    if (sortKey === colId) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortKey(colId); setSortDir(colById.get(colId)?.numeric ? 'desc' : 'asc'); }
+  // Click on a header highlights (selects) that column as the sort key but
+  // does NOT flip direction. Direction control lives in the per-column ⋮ menu.
+  // If the column is already the sort key, this is a no-op.
+  function selectSortColumn(colId: string) {
+    if (sortKey === colId) return;
+    setSortKey(colId);
+    // Preserve the prior direction so the user's intent isn't surprised. The
+    // first time a column is selected and no direction has been set, default
+    // to descending for numeric columns and ascending for text.
+    if (!sortKey) setSortDir(colById.get(colId)?.numeric ? 'desc' : 'asc');
   }
   function toggleCol(id: string) {
     setVisibleCols((prev) => {
@@ -605,7 +655,7 @@ export function DataViewer() {
     setSortDir('asc');
     setSearch('');
     setSelectedTeams(new Set());
-    setAllianceFilter('all');
+    setColumnFilters(new Map());
     setCollapsedGroups(new Set());
   }
   function exportCsv() {
@@ -682,7 +732,7 @@ export function DataViewer() {
             steps: [
               { heading: 'Source', detail: 'Filter to All / Matches / Pits. "All" shows every entry; empty cells mean the field doesn\'t apply to that row.' },
               { heading: 'Group by', detail: 'Pivot the table — group rows by Team, Match, Alliance, Type, or Scout. Group headers show counts and average score.' },
-              { heading: 'Columns', detail: 'Click "Columns" to show/hide fields. Drag column headers to reorder. The first N columns stay frozen — adjust with the pin counter.' },
+              { heading: 'Columns', detail: 'Click a column header to make it the active sort column. To change asc/desc, filter by value (e.g. show only "Swerve" or "Turret: Yes"), or hide the column, tap the ⋮ menu in the header. Filtered columns show a small chip with the count. Drag headers to reorder.' },
               { heading: 'Click a Match cell', detail: 'Opens the TBA match modal with red/blue scores, winner, and embedded video.' },
               { heading: 'Click a Team cell', detail: 'Opens that team\'s pit photos.' },
             ],
@@ -756,23 +806,6 @@ export function DataViewer() {
           <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search team, match, scout…"
                  className="w-full h-7 pl-6 pr-2 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--primary))] text-[11px] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--ring))]" />
-        </div>
-
-        {/* Alliance */}
-        <div className="flex items-center rounded-md border border-[hsl(var(--border))] overflow-hidden">
-          {(['all', 'red', 'blue'] as const).map((a) => (
-            <button key={a} type="button" onClick={() => setAllianceFilter(a)}
-                    className={cn(
-                      'px-2 h-7 text-[10px] uppercase tracking-wider font-semibold transition-colors cursor-pointer border-l border-[hsl(var(--border))] first:border-l-0',
-                      allianceFilter === a
-                        ? a === 'red' ? 'bg-red-500/20 text-red-300'
-                          : a === 'blue' ? 'bg-blue-500/20 text-blue-300'
-                          : 'bg-[hsl(var(--accent))] text-black'
-                        : 'bg-[hsl(var(--primary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
-                    )}>
-              {a}
-            </button>
-          ))}
         </div>
 
         {/* Teams */}
@@ -907,6 +940,8 @@ export function DataViewer() {
                   const isPinned = idx < pinnedCount;
                   const isSortKey = sortKey === c.id;
                   const isDragOver = dragOverCol === c.id;
+                  const colFilter = columnFilters.get(c.id);
+                  const isFiltered = !!colFilter && colFilter.size > 0;
                   return (
                     <div
                       key={c.id}
@@ -916,24 +951,70 @@ export function DataViewer() {
                       onDragLeave={onDragLeave}
                       onDrop={(e) => onDrop(e, c.id)}
                       className={cn(
-                        'group flex items-center gap-1 px-1.5 py-1.5 border-r border-[hsl(var(--border)/0.6)] last:border-r-0 cursor-grab active:cursor-grabbing select-none text-[9px] uppercase tracking-wider font-semibold transition-colors',
-                        isSortKey ? 'text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.08)]' : 'text-[hsl(var(--muted-foreground))]',
+                        'group relative flex items-stretch border-r border-[hsl(var(--border)/0.6)] last:border-r-0 cursor-grab active:cursor-grabbing select-none transition-colors',
+                        isSortKey ? 'bg-[hsl(var(--accent)/0.08)]' : '',
                         isPinned && 'bg-[hsl(var(--muted))]',
                         isDragOver && 'ring-2 ring-inset ring-[hsl(var(--accent))]',
+                        isFiltered && 'shadow-[inset_0_-2px_0_0_hsl(var(--accent))]',
                       )}
                       style={{
-                        width: c.width, minWidth: c.width, flexShrink: 0,
+                        width: c.width, minWidth: c.width, flexShrink: 0, minHeight: 40,
                         ...(isPinned ? { position: 'sticky', left: pinnedLefts[idx], zIndex: 22, background: 'hsl(var(--muted))', boxShadow: idx === pinnedCount - 1 ? '2px 0 4px hsl(0 0% 0% / 0.4)' : undefined } : {}),
                       }}
                       title={`${c.label} — drag to reorder, click to sort`}
                     >
-                      <GripVertical size={9} className="text-[hsl(var(--muted-foreground)/0.5)] opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
-                      <button type="button" onClick={() => toggleSort(c.id)}
-                              className={cn('flex-1 min-w-0 flex items-center gap-1 truncate cursor-pointer',
-                                c.align === 'right' && 'justify-end')}>
-                        <span className="truncate" title={c.label}>{c.label}</span>
-                        {isSortKey && (sortDir === 'asc' ? <ArrowUp size={9} className="shrink-0" /> : <ArrowDown size={9} className="shrink-0" />)}
+                      {/* Click selects this column as the sort key (highlight).
+                          Direction is set explicitly via the ⋮ menu — clicking
+                          the header never toggles asc↔desc. */}
+                      <button
+                        type="button"
+                        onClick={() => selectSortColumn(c.id)}
+                        aria-label={isSortKey ? `${c.label} (current sort)` : `Set sort to ${c.label}`}
+                        className={cn(
+                          'flex-1 min-w-0 flex items-center gap-1 px-1.5 py-1.5 text-[10px] font-semibold leading-tight cursor-pointer transition-colors',
+                          c.align === 'right' ? 'justify-end text-right' : 'justify-start text-left',
+                          isSortKey ? 'text-[hsl(var(--accent))]' : 'text-[hsl(var(--foreground))]/85 hover:text-[hsl(var(--foreground))]',
+                        )}
+                      >
+                        <span className="line-clamp-2 break-words" title={c.label}>{c.label}</span>
+                        {isSortKey && (sortDir === 'asc'
+                          ? <ArrowUp size={10} className="shrink-0" />
+                          : <ArrowDown size={10} className="shrink-0" />
+                        )}
                       </button>
+
+                      {/* Per-column menu (⋮) — opens a popover with Sort, Filter, Hide.
+                          A small filter chip persists when a value filter is active. */}
+                      <div className="flex flex-col items-end justify-between shrink-0 pr-0.5 pt-0.5 pb-1">
+                        <button
+                          type="button"
+                          draggable={false}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                            setColMenu({ colId: c.id, x: rect.right, y: rect.bottom + 2 });
+                          }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          aria-label={`Open menu for column ${c.label}`}
+                          title="Column menu"
+                          className={cn(
+                            'w-5 h-5 flex items-center justify-center rounded transition-opacity cursor-pointer',
+                            isFiltered
+                              ? 'opacity-100 text-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.12)]'
+                              : 'opacity-30 group-hover:opacity-100 focus-visible:opacity-100 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.08)]'
+                          )}
+                        >
+                          <MoreVertical size={11} />
+                        </button>
+                        {isFiltered && (
+                          <span
+                            className="font-data text-[8px] leading-none px-1 py-0.5 rounded bg-[hsl(var(--accent))] text-black font-bold"
+                            title={`Filtering by ${colFilter!.size} value${colFilter!.size !== 1 ? 's' : ''}`}
+                          >
+                            {colFilter!.size}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -1009,6 +1090,45 @@ export function DataViewer() {
       {photoModal && (
         <TeamPhotosModal pit={photoModal} onClose={() => setPhotoModal(null)} />
       )}
+      {colMenu && (() => {
+        const c = colById.get(colMenu.colId);
+        if (!c) return null;
+        const canHide = orderedVisible.length > 1;
+        const distinctValues = getDistinctValues(c, allRows);
+        const activeFilter = columnFilters.get(c.id) ?? new Set<string>();
+        return (
+          <ColumnMenuPopover
+            x={colMenu.x}
+            y={colMenu.y}
+            label={c.label}
+            isSortedAsc={sortKey === c.id && sortDir === 'asc'}
+            isSortedDesc={sortKey === c.id && sortDir === 'desc'}
+            canHide={canHide}
+            distinctValues={distinctValues}
+            activeFilter={activeFilter}
+            onSort={(dir) => { setSortKey(c.id); setSortDir(dir); setColMenu(null); }}
+            onHide={() => { toggleCol(c.id); setColMenu(null); }}
+            onToggleFilterValue={(value) => {
+              setColumnFilters((prev) => {
+                const next = new Map(prev);
+                const cur = new Set(next.get(c.id) ?? []);
+                if (cur.has(value)) cur.delete(value); else cur.add(value);
+                if (cur.size === 0) next.delete(c.id);
+                else next.set(c.id, cur);
+                return next;
+              });
+            }}
+            onClearFilter={() => {
+              setColumnFilters((prev) => {
+                const next = new Map(prev);
+                next.delete(c.id);
+                return next;
+              });
+            }}
+            onClose={() => setColMenu(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -1139,6 +1259,163 @@ function DataRow({ row, columns, pinnedCount, pinnedLefts, totalWidth, onMatchCl
 }
 
 // Column picker with semantic grouping (Meta / Score / Match fields / Pit fields)
+// Per-column action menu — opens on click of the ⋮ button in a header.
+// Positioned in viewport coordinates so it floats above the sticky table.
+// Renders an optional value-filter section when the column has finite
+// categorical values (toggle/select/known meta columns).
+function ColumnMenuPopover({
+  x, y, label, isSortedAsc, isSortedDesc, canHide,
+  distinctValues, activeFilter,
+  onSort, onHide, onToggleFilterValue, onClearFilter, onClose,
+}: {
+  x: number; y: number; label: string;
+  isSortedAsc: boolean; isSortedDesc: boolean; canHide: boolean;
+  distinctValues: string[] | null;       // null = filter UI suppressed (high cardinality)
+  activeFilter: Set<string>;
+  onSort: (dir: 'asc' | 'desc') => void;
+  onHide: () => void;
+  onToggleFilterValue: (value: string) => void;
+  onClearFilter: () => void;
+  onClose: () => void;
+}) {
+  const MENU_W = 240;
+  const left = Math.min(x - MENU_W, window.innerWidth - MENU_W - 8);
+  // Estimate max height — header + sort + (filter section if present) + hide.
+  const hasFilter = distinctValues !== null && distinctValues.length > 0;
+  const filterHeight = hasFilter ? Math.min(180, 32 + distinctValues!.length * 24) : 0;
+  const totalHeight = 56 /* header */ + 70 /* sort items */ + filterHeight + 44 /* hide */;
+  const top = Math.min(y, window.innerHeight - totalHeight - 8);
+
+  return (
+    <>
+      {/* Click-outside catcher */}
+      <div className="fixed inset-0 z-[60]" onClick={onClose} />
+      <div
+        className="fixed z-[61] rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--primary))] shadow-2xl overflow-hidden"
+        style={{ left, top, width: MENU_W }}
+        role="menu"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-3 py-2 border-b border-[hsl(var(--border)/0.5)]">
+          <div className="text-[9px] uppercase tracking-widest text-[hsl(var(--muted-foreground))] font-semibold">Column</div>
+          <div className="text-xs font-semibold text-[hsl(var(--foreground))] truncate" title={label}>{label}</div>
+        </div>
+        <div className="flex flex-col">
+          <MenuItem
+            Icon={ArrowUp}
+            label="Sort ascending"
+            active={isSortedAsc}
+            onClick={() => onSort('asc')}
+          />
+          <MenuItem
+            Icon={ArrowDown}
+            label="Sort descending"
+            active={isSortedDesc}
+            onClick={() => onSort('desc')}
+          />
+
+          {/* Filter section — only shown for finite-value columns */}
+          {hasFilter && (
+            <>
+              <div className="h-px bg-[hsl(var(--border)/0.5)]" />
+              <div className="flex items-center justify-between px-3 pt-2 pb-1">
+                <span className="text-[9px] uppercase tracking-widest text-[hsl(var(--muted-foreground))] font-semibold">
+                  Filter values
+                </span>
+                {activeFilter.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={onClearFilter}
+                    className="text-[9px] text-[hsl(var(--accent))] hover:underline cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="max-h-44 overflow-y-auto pb-1">
+                {distinctValues!.map((v) => {
+                  const on = activeFilter.has(v);
+                  return (
+                    <button
+                      key={v}
+                      type="button"
+                      role="menuitemcheckbox"
+                      aria-checked={on}
+                      onClick={() => onToggleFilterValue(v)}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left cursor-pointer transition-colors',
+                        on
+                          ? 'bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]'
+                          : 'text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'w-3.5 h-3.5 rounded-sm border flex items-center justify-center shrink-0 transition-colors',
+                          on
+                            ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.18)]'
+                            : 'border-[hsl(var(--border))] bg-[hsl(var(--primary))]'
+                        )}
+                        aria-hidden
+                      >
+                        {on && <span className="text-[hsl(var(--accent))] text-[10px] font-bold leading-none">✓</span>}
+                      </span>
+                      <span className="truncate">{v}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          <div className="h-px bg-[hsl(var(--border)/0.5)]" />
+          <MenuItem
+            Icon={EyeOff}
+            label="Hide column"
+            destructive
+            disabled={!canHide}
+            onClick={onHide}
+            hint={!canHide ? 'Need at least one column' : undefined}
+          />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function MenuItem({ Icon, label, active, destructive, disabled, hint, onClick }: {
+  Icon: typeof ArrowUp;
+  label: string;
+  active?: boolean;
+  destructive?: boolean;
+  disabled?: boolean;
+  hint?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors cursor-pointer',
+        disabled
+          ? 'text-[hsl(var(--muted-foreground)/0.5)] cursor-not-allowed'
+          : active
+          ? 'bg-[hsl(var(--accent)/0.12)] text-[hsl(var(--accent))]'
+          : destructive
+          ? 'text-[hsl(var(--foreground))] hover:bg-[hsl(var(--destructive)/0.15)] hover:text-[hsl(var(--destructive))]'
+          : 'text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]'
+      )}
+    >
+      <Icon size={12} className="shrink-0" />
+      <span className="flex-1">{label}</span>
+      {hint && <span className="text-[9px] text-[hsl(var(--muted-foreground))]">{hint}</span>}
+    </button>
+  );
+}
+
 function ColumnPickerGrouped({ columns, visibleCols, toggleCol }: {
   columns: Column[]; visibleCols: Set<string>; toggleCol: (id: string) => void;
 }) {

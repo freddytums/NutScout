@@ -171,3 +171,62 @@
   15%  { opacity: 0.9; }
   100% { transform: translateY(-90px) rotate(15deg);  opacity: 0; }
 }
+
+/* ── ModeSwitcher icon effects ───────────────────────────────────────────── */
+
+/* Scouting: scan line sweeps top→bottom continuously inside the clipboard */
+@keyframes mode-scan {
+  0%   { transform: translateY(0px);  opacity: 0;   }
+  10%  { opacity: 0.95; }
+  90%  { opacity: 0.95; }
+  100% { transform: translateY(10px); opacity: 0;   }
+}
+.mode-scan-line {
+  animation: mode-scan 1.6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Data: bars pulse heights with staggered delay */
+@keyframes mode-bar-pulse {
+  0%, 100% { transform: scaleY(1);    }
+  50%      { transform: scaleY(1.45); }
+}
+.mode-bar {
+  transform-origin: bottom center;
+  transform-box: fill-box;
+  animation: mode-bar-pulse 1.2s ease-in-out infinite;
+}
+.mode-bar.b1 { animation-delay: 0s;   }
+.mode-bar.b2 { animation-delay: 0.18s;}
+.mode-bar.b3 { animation-delay: 0.36s;}
+.mode-bar.b4 { animation-delay: 0.54s;}
+
+/* Pick List: tiers light up in sequence (1st → 2nd → 3rd) */
+@keyframes mode-tier-flash {
+  0%, 70%, 100% { fill-opacity: 0.35; }
+  20%, 35%      { fill-opacity: 1;    }
+}
+.mode-tier {
+  animation: mode-tier-flash 1.6s ease-in-out infinite;
+}
+.mode-tier.t1 { animation-delay: 0s;    }
+.mode-tier.t2 { animation-delay: 0.22s; }
+.mode-tier.t3 { animation-delay: 0.44s; }
+
+/* Mode-switcher thumb sliding curve (spring-y with subtle overshoot) */
+.mode-thumb {
+  transition: transform 380ms cubic-bezier(0.34, 1.35, 0.55, 1);
+}
+
+/* Respect reduced motion — pause icon animations and shorten the slide */
+@media (prefers-reduced-motion: reduce) {
+  .mode-scan-line,
+  .mode-bar,
+  .mode-tier {
+    animation: none !important;
+  }
+  .mode-thumb {
+    transition-duration: 1ms !important;
+  }
+}

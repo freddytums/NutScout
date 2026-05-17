@@ -19,6 +19,7 @@ const ManageHub = lazy(() => import('@/pages/ManageHub').then((m) => ({ default:
 const LeadDashboard = lazy(() => import('@/pages/LeadDashboard').then((m) => ({ default: m.LeadDashboard })));
 const DataManagement = lazy(() => import('@/pages/DataManagement').then((m) => ({ default: m.DataManagement })));
 const DataViewer = lazy(() => import('@/pages/DataViewer').then((m) => ({ default: m.DataViewer })));
+const PickList = lazy(() => import('@/pages/PickList').then((m) => ({ default: m.PickList })));
 const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m.Settings })));
 
 function PageLoader() {
@@ -68,6 +69,7 @@ function App() {
               <Route path="assignments" element={<Assignments />} />
               <Route path="leaderboard" element={<Leaderboard />} />
               <Route path="viewer" element={<DataViewer />} />
+              <Route path="picklist" element={<PickList />} />
               <Route path="profile" element={<Profile />} />
               <Route path="settings" element={<Settings />} />
 

@@ -1,10 +1,11 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { ClipboardList, Wrench, CalendarCheck, LayoutDashboard, Settings, BarChart3 } from 'lucide-react';
+import { ClipboardList, Wrench, CalendarCheck, LayoutDashboard, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { isAtLeastScout } from '@/types/scout';
 import { RoleSandbox } from '@/components/RoleSandbox';
 import { ProfileMenu } from '@/components/ProfileMenu';
+import { ModeSwitcher } from '@/components/mode-switcher/ModeSwitcher';
 import { GuestLanding } from '@/pages/GuestLanding';
 
 const navItems = [
@@ -23,7 +24,7 @@ export function AppShell() {
   );
 
   const isGuest = !!user && !isAtLeastScout(user.role);
-  const canViewData = !!user && isAtLeastScout(user.role);
+  const canSwitchModes = !!user && isAtLeastScout(user.role);
 
   return (
     <div className="flex flex-col min-h-dvh bg-[hsl(var(--background))]">
@@ -35,23 +36,6 @@ export function AppShell() {
             <span className="font-[Orbitron] font-bold text-sm tracking-widest text-[hsl(var(--foreground))]">
               NUTSCOUT
             </span>
-            {canViewData && (
-              <NavLink
-                to="/viewer"
-                className={({ isActive }) =>
-                  cn(
-                    'ml-2 flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[11px] font-semibold border transition-all cursor-pointer',
-                    isActive
-                      ? 'border-[hsl(var(--accent))] bg-[hsl(var(--accent)/0.15)] text-[hsl(var(--accent))] glow-green'
-                      : 'border-[hsl(var(--border))] bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--accent)/0.5)] hover:text-[hsl(var(--accent))]'
-                  )
-                }
-                aria-label="Open data viewer"
-              >
-                <BarChart3 size={12} />
-                <span>Data</span>
-              </NavLink>
-            )}
           </div>
           {user && (
             <div className="flex items-center gap-2">
@@ -60,6 +44,7 @@ export function AppShell() {
             </div>
           )}
         </div>
+        {canSwitchModes && <ModeSwitcher />}
       </header>
 
       {/* Page content */}
