@@ -34,7 +34,13 @@
       "Bash(python3 *)",
       "Bash(where python.exe)",
       "Bash(py --version)",
-      "Bash(dir *)"
+      "Bash(dir *)",
+      "Bash(git merge *)",
+      "Bash(npm install *)",
+      "Bash(git ls-tree *)",
+      "Bash(git check-ignore *)",
+      "Bash(xargs -I{} sh -c 'echo {}; git log --all --format=\"  ↳ first-seen: %h %s\" --diff-filter=A -- {} 2>/dev/null | head -1')",
+      "Bash(grep -B1 -E \"first-seen.*$\\(git rev-parse HEAD\\)\")"
     ]
   }
 }
